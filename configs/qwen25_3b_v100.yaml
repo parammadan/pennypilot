@@ -1,0 +1,56 @@
+# Quick single-GPU verification run on a Tesla V100 32GB, post-training
+# Qwen2.5-3B instead of the default Qwen3-0.6B.
+#
+# dtype is explicitly float16, NOT bf16/auto: V100 is Volta (compute
+# capability 7.0) and has no bf16 tensor-core support, unlike Ampere+ (A10G,
+# A100). `model.dtype: auto` in shoprl.rollout.hf._resolve_dtype picks bf16
+# on any CUDA device without checking compute capability, which would silently
+# run bf16 on unsupported hardware -- so we pin it here instead.
+#
+# Batch (num_samples=8, prompts_per_step=1 -> 8 completions/step) mirrors the
+# proven-safe A10G (24GB) setting from demo_gpu.yaml. A 3B model needs more
+# headroom than the 0.6B default (bigger weights + wider hidden dim ->
+# bigger activations/logits), so we start at the same batch size on a bigger
+# (32GB) GPU rather than searching for the max that fits -- that search costs
+# GPU time via trial-and-error OOMs. Once this confirms real learning
+# (reward/KL/loss moving), batch size can be pushed up step by step.
+experiment:
+  name: shoprl-qwen25-3b-v100-smoke
+  seed: 0
+
+model:
+  name: Qwen/Qwen2.5-3B
+  dtype: float16
+  device: auto
+
+algorithm: grpo
+
+rollout:
+  engine: hf
+  max_new_tokens: 48
+  temperature: 1.3
+  top_p: 0.98
+  num_samples: 8
+
+training:
+  steps: 5                 # few steps: just enough to see reward/KL/loss move
+  prompts_per_step: 1      # effective batch = 1 * 8 = 8
+  lr: 2.0e-5
+  clip_eps: 0.2
+  beta: 0.04
+  max_grad_norm: 1.0
+  lora_r: 8
+  lora_alpha: 16
+  catalog_size: 300
+  shortlist: 10
+  ckpt_dir: checkpoints
+  save_every: 1000
+
+rewards:
+  weights:
+    budget: 0.10
+    groundedness: 0.15
+    coverage: 0.30
+    quality_format: 0.10
+    quality_comparison: 0.35
+  hallucination_penalty: 0.50
