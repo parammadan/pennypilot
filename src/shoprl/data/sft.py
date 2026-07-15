@@ -34,6 +34,7 @@ from pathlib import Path
 
 from shoprl.data.catalog import Product, catalog_index
 from shoprl.data.prompts import satisfies
+from shoprl.env.pennyenv import format_candidates, search_catalog
 from shoprl.env.scenario import Scenario, generate_scenarios
 
 # --- user-turn phrasing pools (agent turns stay structured grammar tokens) ---
@@ -167,7 +168,11 @@ def _discovery_turns(scen: Scenario, order: str, confirm: bool,
 
 def _build_demo(scen: Scenario, catalog: list[Product], idx: dict[str, Product],
                 kind: str, order: str, confirm: bool, rng: random.Random) -> Demo:
-    target = cheapest_valid(scen, idx)
+    # After both constraints are known, SEARCH returns the valid set cheapest-
+    # first; the demonstrated pick is the first (cheapest) result the agent sees.
+    cands = search_catalog(catalog, scen, {"budget", "feature"})
+    target = cands[0].sku
+    search_obs = format_candidates(cands)
     turns: list[DemoTurn] = [DemoTurn("user", scen.opening_utterance)]
     disc, n_clarify = _discovery_turns(scen, order, confirm, rng)
     turns += disc
@@ -177,8 +182,13 @@ def _build_demo(scen: Scenario, catalog: list[Product], idx: dict[str, Product],
         bad = _bad_sku(scen, catalog, rng)
         if bad is not None:
             has_rejection = True
+            # Guessed before searching -> rejected -> recover by searching.
             turns.append(_agent(f"RECOMMEND[{bad}]"))
             turns.append(DemoTurn("user", _reject_line(idx[bad].price, rng)))
+
+    # SEARCH (grounding) then read the cheapest valid item off the list.
+    turns.append(_agent("SEARCH"))
+    turns.append(DemoTurn("user", search_obs))
 
     if kind == "permission_edge":
         # Correctly DECLINE to add without an explicit accept: recommend, the

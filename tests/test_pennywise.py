@@ -103,6 +103,25 @@ def test_guessing_an_invalid_item_is_rejected_by_judge():
     assert r.value_quality == 0.0
 
 
+def test_search_grounds_the_cheapest_valid_only_after_asking():
+    """SEARCH returns candidates consistent with what the agent KNOWS, cheapest
+    first. With both constraints known the first result is a cheapest valid item
+    (value 1.0); with nothing known it's the globally cheapest (usually invalid)
+    -- so asking first is still required to ground a valid recommendation."""
+    cat, idx, scen = _fixture()
+    from shoprl.env.pennyenv import search_catalog
+    from shoprl.env.reward import value_quality
+
+    both = search_catalog(cat, scen, {"budget", "feature"})
+    assert [p.price for p in both] == sorted(p.price for p in both)  # cheapest-first
+    assert value_quality(both[0].sku, scen, idx) == 1.0             # groundable optimum
+    for p in both:
+        assert p.sku in scen.valid_skus                             # all valid
+
+    none = search_catalog(cat, scen, set())
+    assert none[0].price == min(p.price for p in cat)               # globally cheapest
+
+
 def test_redundant_ask_yields_no_info_gain():
     cat, idx, scen = _fixture()
     env = PennyEnv(cat, scen, idx=idx)

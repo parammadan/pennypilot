@@ -22,7 +22,7 @@ from shoprl.env.scenario import generate_scenarios
 N = 300
 SEED = 0
 _GRAMMAR = re.compile(
-    r"^(ASK\[(budget|feature)\]|RECOMMEND\[LAP-\d{4}\]|ASK_PERMISSION|ADD_TO_CART\[LAP-\d{4}\])$")
+    r"^(ASK\[(budget|feature)\]|SEARCH|RECOMMEND\[LAP-\d{4}\]|ASK_PERMISSION|ADD_TO_CART\[LAP-\d{4}\])$")
 
 
 @pytest.fixture(scope="module")
@@ -70,9 +70,15 @@ def _replay(demo, cat, idx, scen):
 
 def test_recommended_item_is_the_cheapest_valid(fixture):
     cat, idx, demos, scen_by_id = fixture
+    from shoprl.env.reward import value_quality
     for d in demos:
         scen = scen_by_id[d.scenario_id]
-        assert d.target_sku == cheapest_valid(scen, idx)
+        # target = first SEARCH result; assert it is a cheapest-priced valid item
+        # (value_quality 1.0). Exact-SKU vs cheapest_valid can differ on price
+        # ties, but the reward treats any min-price valid item identically.
+        assert d.target_sku in scen.valid_skus
+        assert value_quality(d.target_sku, scen, idx) == 1.0
+        assert idx[d.target_sku].price == idx[cheapest_valid(scen, idx)].price
 
 
 def test_positive_demos_legitimately_add_cheapest_valid(fixture):

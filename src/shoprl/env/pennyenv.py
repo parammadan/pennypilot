@@ -27,10 +27,45 @@ from shoprl.env.scenario import Scenario
 from shoprl.env.simulator import ConversationModel, ScriptedConversation, judge_accept
 
 _ACTION_RE = re.compile(
-    r"(ASK_PERMISSION|ADD_TO_CART|RECOMMEND|ASK)(?:\s*\[(.*?)\])?", re.IGNORECASE)
+    r"(ASK_PERMISSION|ADD_TO_CART|RECOMMEND|SEARCH|ASK)(?:\s*\[(.*?)\])?",
+    re.IGNORECASE)
 _BUDGET_WORDS = ("budget", "price", "spend", "afford", "cost", "$", "how much")
 _FEATURE_WORDS = ("ram", "gb", "memory", "battery", "hour", "weight", "lb",
                   "brand", "make", "spec", "feature")
+_SEARCH_TOPK = 10
+
+
+def search_catalog(catalog: list[Product], scenario: Scenario, known: set[str],
+                   k: int = _SEARCH_TOPK) -> list[Product]:
+    """Catalog items consistent with the constraints the agent has DISCOVERED
+    (`known` ⊆ {'budget','feature'}), cheapest first, top-k. Searching before
+    asking (empty `known`) returns the globally cheapest items — which usually
+    violate the hidden must-have — so asking first is still the winning move; the
+    first result becomes the cheapest VALID item only once both are known."""
+    out = []
+    for p in catalog:
+        if "budget" in known and p.price > scenario.hidden_budget:
+            continue
+        if "feature" in known:
+            if scenario.must_have_key == "brand":
+                if p.brand != scenario.must_have_value:
+                    continue
+            elif not satisfies(p, {scenario.must_have_key: float(scenario.must_have_value)}):
+                continue
+        out.append(p)
+    out.sort(key=lambda p: p.price)
+    return out[:k]
+
+
+def format_candidates(cands: list[Product]) -> str:
+    """The store's response the agent reads to pick from (env observation)."""
+    if not cands:
+        return "No matching products found."
+    lines = ["Matching products (cheapest first):"]
+    for p in cands:
+        lines.append(f"- {p.sku}: ${p.price:.0f}, {p.ram_gb}GB RAM, "
+                     f"{p.weight_lbs}lbs, {p.battery_hrs}hrs, {p.brand}")
+    return "\n".join(lines)
 
 
 @dataclass
@@ -49,6 +84,7 @@ class PennyState:
     turn: int = 0
     known: dict[str, float | str] = field(default_factory=dict)  # 'budget'/'feature'
     recommended: str | None = None
+    last_search: list[str] = field(default_factory=list)  # SKUs shown by last SEARCH
     permission_for: str | None = None   # SKU the user explicitly accepted
     asked_permission: bool = False      # asked permission for a recommended item
     accepted: bool = False              # last permission decision (programmatic)
@@ -152,6 +188,12 @@ class PennyEnv:
             else:
                 note = "redundant/irrelevant ask (no new info)"
                 user = self.conversation.utter("other", self.scenario)
+
+        elif kind == "SEARCH":
+            cands = search_catalog(self.catalog, self.scenario, set(s.known))
+            s.last_search = [p.sku for p in cands]
+            note = f"search -> {len(cands)} candidates (known={sorted(s.known)})"
+            user = format_candidates(cands)   # env/store observation, not the user
 
         elif kind == "RECOMMEND":
             s.recommended = arg.upper() or s.recommended

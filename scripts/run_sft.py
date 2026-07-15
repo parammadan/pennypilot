@@ -25,7 +25,7 @@ from shoprl.train.build import build_model
 from shoprl.train.sft import train_sft
 
 _GRAMMAR = re.compile(
-    r"^(ASK\[(budget|feature)\]|RECOMMEND\[LAP-\d{4}\]|ASK_PERMISSION|ADD_TO_CART\[LAP-\d{4}\])$")
+    r"^(ASK\[(budget|feature)\]|SEARCH|RECOMMEND\[LAP-\d{4}\]|ASK_PERMISSION|ADD_TO_CART\[LAP-\d{4}\])$")
 
 
 @torch.no_grad()

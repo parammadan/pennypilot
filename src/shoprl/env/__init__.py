@@ -9,7 +9,8 @@ This module is the SIMULATOR only (state, actions, transitions, episode). The
 trajectory reward + credit assignment is built separately (taught step by step);
 nothing here is wired into training yet.
 """
-from shoprl.env.pennyenv import PennyEnv, PennyState, PennyTurn
+from shoprl.env.pennyenv import (PennyEnv, PennyState, PennyTurn,
+                                 format_candidates, search_catalog)
 from shoprl.env.reward import (PennyBreakdown, assign_credit, episode_reward,
                                pennywise_reward, value_quality)
 from shoprl.env.scenario import Scenario, generate_scenarios, scenario_valid_skus
@@ -25,6 +26,6 @@ __all__ = [
     "Scenario", "generate_scenarios", "scenario_valid_skus",
     "judge_accept", "ConversationModel", "ScriptedConversation",
     "FrozenLLMConversation",
-    "PennyEnv", "PennyState", "PennyTurn",
+    "PennyEnv", "PennyState", "PennyTurn", "search_catalog", "format_candidates",
     "pennywise_reward", "value_quality", "PennyBreakdown",
 ]
