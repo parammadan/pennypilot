@@ -1,0 +1,253 @@
+{
+  "device": "Tesla V100-SXM2-32GB",
+  "total_gb": 34.08,
+  "cap_gb": 30.0,
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "dtype": "float16",
+  "methods": [
+    {
+      "method": "full",
+      "fixed_gb": 18.57,
+      "trainable_frac": null,
+      "results": [
+        {
+          "batch": 1,
+          "seq_len": 512,
+          "tokens": 512,
+          "ok": true,
+          "peak_gb": 18.73
+        },
+        {
+          "batch": 1,
+          "seq_len": 1024,
+          "tokens": 1024,
+          "ok": true,
+          "peak_gb": 19.4
+        },
+        {
+          "batch": 1,
+          "seq_len": 1536,
+          "tokens": 1536,
+          "ok": true,
+          "peak_gb": 23.9
+        },
+        {
+          "batch": 1,
+          "seq_len": 2048,
+          "tokens": 2048,
+          "ok": true,
+          "peak_gb": 29.17
+        },
+        {
+          "batch": 4,
+          "seq_len": 512,
+          "tokens": 2048,
+          "ok": true,
+          "peak_gb": 25.02
+        },
+        {
+          "batch": 1,
+          "seq_len": 3072,
+          "tokens": 3072,
+          "ok": false,
+          "peak_gb": null,
+          "note": "OOM"
+        },
+        {
+          "batch": 8,
+          "seq_len": 512,
+          "tokens": 4096,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 4,
+          "seq_len": 1024,
+          "tokens": 4096,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 4,
+          "seq_len": 1536,
+          "tokens": 6144,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 4,
+          "seq_len": 2048,
+          "tokens": 8192,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 8,
+          "seq_len": 1024,
+          "tokens": 8192,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 4,
+          "seq_len": 3072,
+          "tokens": 12288,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 8,
+          "seq_len": 1536,
+          "tokens": 12288,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 8,
+          "seq_len": 2048,
+          "tokens": 16384,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 8,
+          "seq_len": 3072,
+          "tokens": 24576,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        }
+      ]
+    },
+    {
+      "method": "lora",
+      "fixed_gb": 3.67,
+      "trainable_frac": null,
+      "results": [
+        {
+          "batch": 1,
+          "seq_len": 512,
+          "tokens": 512,
+          "ok": true,
+          "peak_gb": 7.07
+        },
+        {
+          "batch": 1,
+          "seq_len": 1024,
+          "tokens": 1024,
+          "ok": true,
+          "peak_gb": 11.52
+        },
+        {
+          "batch": 1,
+          "seq_len": 1536,
+          "tokens": 1536,
+          "ok": true,
+          "peak_gb": 16.56
+        },
+        {
+          "batch": 1,
+          "seq_len": 2048,
+          "tokens": 2048,
+          "ok": true,
+          "peak_gb": 22.39
+        },
+        {
+          "batch": 4,
+          "seq_len": 512,
+          "tokens": 2048,
+          "ok": true,
+          "peak_gb": 18.21
+        },
+        {
+          "batch": 1,
+          "seq_len": 3072,
+          "tokens": 3072,
+          "ok": false,
+          "peak_gb": null,
+          "note": "OOM"
+        },
+        {
+          "batch": 8,
+          "seq_len": 512,
+          "tokens": 4096,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 4,
+          "seq_len": 1024,
+          "tokens": 4096,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 4,
+          "seq_len": 1536,
+          "tokens": 6144,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 4,
+          "seq_len": 2048,
+          "tokens": 8192,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 8,
+          "seq_len": 1024,
+          "tokens": 8192,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 4,
+          "seq_len": 3072,
+          "tokens": 12288,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 8,
+          "seq_len": 1536,
+          "tokens": 12288,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 8,
+          "seq_len": 2048,
+          "tokens": 16384,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        },
+        {
+          "batch": 8,
+          "seq_len": 3072,
+          "tokens": 24576,
+          "ok": false,
+          "peak_gb": null,
+          "note": "skipped (> OOM floor)"
+        }
+      ]
+    }
+  ]
+}
