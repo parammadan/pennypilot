@@ -40,9 +40,18 @@ def _gen_action(model, tok, messages, device, max_new_tokens=24) -> str:
 
 
 def grammar_check(built, catalog, idx, n=40, seed=1000, max_turns=10) -> dict:
-    """Drive held-out episodes with the model; report well-formed-action rate."""
+    """Drive held-out episodes with the model; report well-formed-action rate.
+
+    Training leaves use_cache=False + gradient checkpointing on, which makes
+    generation pathologically slow (no KV cache). Toggle both for the duration
+    of the check, then restore the training config."""
     model, tok = built.policy, built.tokenizer
     model.eval()
+    model.config.use_cache = True
+    try:
+        model.gradient_checkpointing_disable()
+    except Exception:
+        pass
     skus = set(idx)
     scen = generate_scenarios(catalog, n=n, seed=seed)
     total, wellformed, samples = 0, 0, []
@@ -65,6 +74,14 @@ def grammar_check(built, catalog, idx, n=40, seed=1000, max_turns=10) -> dict:
             user, done, _ = env.step(action)
             messages += [{"role": "assistant", "content": action},
                          {"role": "user", "content": user}]
+    # Restore training config (gradient checkpointing on, cache off).
+    model.config.use_cache = False
+    try:
+        model.gradient_checkpointing_enable(
+            gradient_checkpointing_kwargs={"use_reentrant": False})
+    except Exception:
+        pass
+    model.train()
     return {"actions": total, "wellformed": wellformed,
             "wellformed_rate": round(wellformed / max(total, 1), 4),
             "samples": samples}
@@ -74,6 +91,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
     ap.add_argument("--method", default="full", choices=["full", "lora"])
+    ap.add_argument("--dtype", default="bfloat16",
+                    choices=["bfloat16", "float16", "float32"])
     ap.add_argument("--n-demos", type=int, default=1000)
     ap.add_argument("--max-len", type=int, default=1024)
     ap.add_argument("--max-turns", type=int, default=10)
@@ -90,17 +109,22 @@ def main() -> None:
     demos = generate_sft_dialogues(catalog, n=args.n_demos, seed=0)
     print(f"[sft] {len(demos)} demos | model={args.model} method={args.method}")
 
-    built = build_model(args.model, method=args.method, dtype=torch.float16,
+    dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16,
+             "float32": torch.float32}[args.dtype]
+    built = build_model(args.model, method=args.method, dtype=dtype,
                         device="cuda", grad_checkpointing=True)
-    print(f"[sft] trainable={built.trainable_params():,}/{built.total_params():,}")
+    print(f"[sft] dtype={args.dtype} trainable={built.trainable_params():,}"
+          f"/{built.total_params():,}")
 
     # Pre-SFT grammar baseline (instruct model, no warmup yet).
     pre = grammar_check(built, catalog, idx, n=20, max_turns=args.max_turns)
     print(f"[sft] pre-SFT well-formed rate: {pre['wellformed_rate']} "
           f"({pre['wellformed']}/{pre['actions']})")
 
+    import math
     os.makedirs(args.out_dir, exist_ok=True)
     metrics_path = os.path.join(args.out_dir, "sft_metrics.jsonl")
+    diverged = False
     with open(metrics_path, "w") as f:
         for m in train_sft(built, demos, max_len=args.max_len,
                            batch_size=args.batch_size, epochs=args.epochs,
@@ -109,6 +133,14 @@ def main() -> None:
             if m["step"] % 10 == 0 or m["step"] == 1:
                 print(f"  step {m['step']:>4} | loss {m['loss']:.4f} "
                       f"| sup_tokens {m['supervised_tokens']}")
+            if not math.isfinite(m["loss"]):
+                print(f"[sft] DIVERGED: non-finite loss at step {m['step']} "
+                      f"(dtype={args.dtype}). Stopping — not a stable config.")
+                diverged = True
+                break
+    if diverged:
+        print("[sft] skipping post-SFT grammar check + save (diverged run).")
+        return
 
     post = grammar_check(built, catalog, idx, n=40, max_turns=args.max_turns)
     print(f"[sft] post-SFT well-formed rate: {post['wellformed_rate']} "
