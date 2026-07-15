@@ -14,8 +14,8 @@ from shoprl.env.reward import (PennyBreakdown, assign_credit, episode_reward,
                                pennywise_reward, value_quality)
 from shoprl.env.scenario import Scenario, generate_scenarios, scenario_valid_skus
 from shoprl.env.shopenv import Action, EnvState, Goal, ShopEnv, parse_action
-from shoprl.env.simulator import (ConversationModel, ScriptedConversation,
-                                  judge_accept)
+from shoprl.env.simulator import (ConversationModel, FrozenLLMConversation,
+                                  ScriptedConversation, judge_accept)
 
 __all__ = [
     # single-goal ShopEnv (legacy substrate)
@@ -24,6 +24,7 @@ __all__ = [
     # Pennywise hidden-need + permission
     "Scenario", "generate_scenarios", "scenario_valid_skus",
     "judge_accept", "ConversationModel", "ScriptedConversation",
+    "FrozenLLMConversation",
     "PennyEnv", "PennyState", "PennyTurn",
     "pennywise_reward", "value_quality", "PennyBreakdown",
 ]
