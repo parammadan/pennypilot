@@ -160,9 +160,13 @@ def rloo_step(policy, reference, tok, optimizer, catalog, scenarios, idx, device
             lp_pol = _token_logprobs(policy, ids, device)
             with torch.no_grad():
                 lp_ref = _token_logprobs(reference, ids, device)
-            pg = -A * lp_pol[asst].sum()
+            # Per-token normalization (mean, not sum) so the gradient scale is
+            # O(1) and independent of trajectory length -- otherwise grad-norm
+            # clipping does all the work and masks the real update (seen in the
+            # 10-step smoke: grad_norm up to ~668 pre-clip).
+            pg = -A * lp_pol[asst].mean()
             kl = _k3_kl(lp_pol[asst], lp_ref[asst])
-            loss = (pg + cfg.beta * kl.sum()) / n
+            loss = (pg + cfg.beta * kl.mean()) / n
             loss.backward()
             kls.append(kl.mean().item())
 
