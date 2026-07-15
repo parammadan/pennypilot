@@ -24,16 +24,16 @@ def demo_to_messages(demo: Demo) -> list[dict]:
 
 
 def encode(tokenizer, messages: list[dict], add_generation_prompt: bool) -> list[int]:
-    """Chat-template -> flat list of token ids. Robust to transformers versions
-    where apply_chat_template(tokenize=True) returns a dict (input_ids +
-    attention_mask) rather than a bare list."""
-    out = tokenizer.apply_chat_template(
-        messages, tokenize=True, add_generation_prompt=add_generation_prompt)
-    if isinstance(out, dict):
-        out = out["input_ids"]
-    if out and isinstance(out[0], list):  # accidental batch nesting
-        out = out[0]
-    return list(out)
+    """Chat-template -> flat list of token ids. transformers 5.13 returns a
+    BatchEncoding (a UserDict, NOT a dict subclass), so we force return_dict and
+    read input_ids explicitly rather than relying on isinstance(_, dict)."""
+    enc = tokenizer.apply_chat_template(
+        messages, tokenize=True, return_dict=True,
+        add_generation_prompt=add_generation_prompt)
+    ids = enc["input_ids"]
+    if ids and isinstance(ids[0], list):  # accidental batch nesting
+        ids = ids[0]
+    return list(ids)
 
 
 def build_example(tokenizer, demo: Demo, max_len: int) -> dict:
