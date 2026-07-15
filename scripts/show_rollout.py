@@ -11,6 +11,7 @@ mean value_quality / permission-violation / accept over held-out scenarios.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import statistics
 
@@ -43,6 +44,7 @@ def main() -> None:
     ap.add_argument("--max-turns", type=int, default=12)
     ap.add_argument("--catalog-size", type=int, default=500)
     ap.add_argument("--seed", type=int, default=1000)
+    ap.add_argument("--out", default=None, help="write ALL transcripts to this JSONL")
     args = ap.parse_args()
 
     tok = AutoTokenizer.from_pretrained(args.ckpt)
@@ -55,6 +57,7 @@ def main() -> None:
     scen = generate_scenarios(cat, n=args.n, seed=args.seed)  # held-out seed
 
     vqs, viols, accepts, asked, cheapest_hits = [], [], [], [], []
+    records = []
     for k, s in enumerate(scen):
         env = PennyEnv(cat, s, idx=idx, max_turns=args.max_turns)
         opener = env.reset()
@@ -75,6 +78,15 @@ def main() -> None:
         accepts.append(r.accepted)
         asked.append(1.0 if any(t.action == "ASK" for t in env.turns) else 0.0)
         cheapest_hits.append(1.0 if added == cheapest else 0.0)
+        records.append({
+            "scenario_id": s.scenario_id,
+            "hidden": {"budget": s.hidden_budget, "must_have_key": s.must_have_key,
+                       "must_have_value": s.must_have_value, "n_valid": len(s.valid_skus)},
+            "cheapest_valid": cheapest, "added": added,
+            "value_quality": r.value_quality, "accepted": r.accepted,
+            "violation": r.acted_without_permission, "total": r.total,
+            "transcript": [{"role": role, "text": text} for role, text in transcript],
+        })
 
         if k < args.show:
             print(f"\n===== held-out scenario {s.scenario_id} =====")
@@ -94,6 +106,14 @@ def main() -> None:
     print(f"accept_rate         {m(accepts):.3f}")
     print(f"mean value_quality  {m(vqs):.3f}")
     print(f"cheapest-valid hit  {m(cheapest_hits):.3f}  (added the single cheapest valid item)")
+
+    if args.out:
+        import os
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w") as f:
+            for rec in records:
+                f.write(json.dumps(rec) + "\n")
+        print(f"[rollout] wrote {len(records)} transcripts -> {args.out}")
 
 
 if __name__ == "__main__":
