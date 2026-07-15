@@ -133,6 +133,39 @@ retrieve→shortlist, and Phase-4's Chromium browsing). Then "recommend cheapest
 valid" is groundable and RLOO can sharpen it. The ritual (ask/permission) is
 already present and must be preserved through RL.
 
+### Grounding fix — CONFIRMED (SEARCH action added)
+
+Added a `SEARCH` action (`env.search_catalog` / `format_candidates`): once the
+agent has discovered the constraints, it returns the matching products
+cheapest-first as an observation; searching before asking returns the globally
+cheapest (usually invalid), so asking-first is still required. SFT demos now
+teach ask → discover → SEARCH → RECOMMEND[first/cheapest] → permission → add.
+
+Grounded SFT (bf16, 1000 demos, 250 steps, `max_len 640`) then re-evaluated on
+the **same 30 held-out scenarios**:
+
+| metric | pre-grounding | grounded |
+|---|---|---|
+| ask_rate | 1.000 | **1.000** |
+| violation_rate | 0.000 | **0.000** |
+| accept_rate | 0.40 | **1.000** |
+| mean value_quality | 0.339 | **1.000** |
+| cheapest-valid hit | 0.267 | **1.000** |
+
+It learned a **general procedure** (search → read the list → pick the cheapest
+shown), not memorized SKUs — hence 100% on unseen hidden needs.
+
+### Honest implication for RLOO
+SFT + grounding **near-saturates this synthetic task** (value/accept/cheapest all
+1.0, zero violations, always asks). So RLOO's value here is **not** squeezing a
+saturated metric — it is (a) demonstrating the post-training *pipeline* (the
+deliverable: multi-turn rollout → verifiable reward → leave-one-out advantage →
+KL-controlled update → checkpoint, stable and observable), and (b) guarding
+against regression — confirming RL does **not** destroy the clarifying/permission
+behaviour (the "RL kills asking" collapse) and that KL stays controlled (the
+RLOO-vs-PPO stability story). Harder/curriculum scenarios can widen the SFT gap
+later if a larger reward delta is wanted.
+
 ## Bugs caught (before they cost GPU time)
 
 1. `.gitignore` bare `env/` was ignoring the entire `src/shoprl/env/` novelty
