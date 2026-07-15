@@ -227,3 +227,49 @@ Pipeline validated end-to-end on the V100 — SFT warmup → grounded env → RL
 (rollout → verifiable reward → leave-one-out advantage → KL-controlled update →
 checkpoint), stable and observable. Next: Phase 3 (efficiency + observability;
 A10G rollout throughput, dashboard, S3 checkpoint bridge, checkpoint/resume).
+
+## Did RLOO improve value_quality, or hold it? (plain answer)
+
+**SFT already reached value_quality ≈ 1.0; RLOO held it stable — this is a
+stability result, not a learning gain.**
+
+- **Greedy eval** (`show_rollout`, deterministic): grounded **SFT = 1.0**;
+  **post-RLOO = 1.0** on the same 30 held-out scenarios → RLOO did **not**
+  improve greedy behaviour (it was already solved) and, importantly, did **not
+  regress** it.
+- **RLOO training-step value_mean** (sampled rollouts, T=1.0): 0.750 (step 0) →
+  0.875 (step 10) → 1.000 (step 25–49). This rise is the policy *sharpening*
+  under sampling (its T=1.0 samples converge onto the already-correct greedy
+  path), not new capability — greedy was 1.0 the whole time.
+
+Honest headline: **stable multi-turn RLOO — KL controlled (~0.0035), clarifying
++ permission behaviour preserved, no regression.** A legitimate training-infra
+result; NOT a dramatic behaviour improvement (the numbers don't show one).
+
+## Phase 2 — honest summary
+
+- **Full fine-tune fits** the V100 32 GB (profiled: fixed 18.57 GB, OOM wall
+  ~seq 3072; short dialogues ≪ that). LoRA not needed.
+- **fp16 full-FT diverges to NaN; bf16 is stable** (fp32-master doesn't fit).
+  bf16 on Volta is *emulated* (no tensor cores) → slower per-op; accepted for
+  stability. (Clean fp16-vs-bf16 throughput micro-benchmark still TODO — the two
+  SFT runs were confounded by a KV-cache change.)
+- **Catalog grounding was the real unlock**: without a `SEARCH` action the agent
+  couldn't identify valid/cheap items (value 0.339, below the 0.55 random
+  baseline); with it, value_quality 0.339 → **1.0** (accept + cheapest-hit → 1.0).
+- **Stable RLOO**: multi-turn rollout → verifiable reward → leave-one-out
+  advantage → KL-controlled update → checkpoint. KL a bounded 0 → ~0.0035,
+  ask 1.0 / violation 0.0 through 50 steps, no regression.
+- **Honest caveat**: post-SFT the task is easy ("read the price-sorted SEARCH
+  list, pick the cheapest valid = item #1"), so RLOO's headline is **stability +
+  no-regression**, not dramatic learning. See PHASE2_NOTES "Phase 2b" for the
+  harder-scenario upgrade that would make RLOO show measurable learning.
+
+## Artifacts & notes
+
+- **RLOO rollout transcripts** (30 held-out, raw dialogues): `results/rloo50_transcripts.jsonl`.
+- **Simulator note (fixed in Phase 4):** the `ScriptedConversation` generic
+  fallback emits an odd trailing user line ("Could you help me find the right
+  one?") after the agent already recommends/adds. Cosmetic — it does not affect
+  the programmatic reward/judge — and is replaced when the frozen-LLM simulator
+  lands in Phase 4.

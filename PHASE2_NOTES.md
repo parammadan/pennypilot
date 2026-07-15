@@ -84,3 +84,17 @@ SLURM cluster (login `madan.pa`); the GPU node has the conda env + CUDA module
 (see `env.sh`). The V100 partition name and exact GRES string are NEU-specific
 and must be discovered on the login node (`sinfo`, `scontrol show partition`),
 not assumed.
+
+## Phase 2b (optional, NOT built) — harder scenarios for measurable RLOO learning
+
+Post-SFT the task is easy: the `SEARCH` list is price-sorted, so "recommend the
+cheapest valid" reduces to "pick item #1", which SFT already solves (greedy value
+1.0). To make RLOO show *measurable learning* rather than only stability, add
+difficulty so cheapest-valid ≠ list position #1:
+- multiple simultaneous must-haves (e.g. brand AND min-battery AND max-weight);
+- distractor items (valid-looking but violating a hidden constraint) in the list;
+- a value function where the best pick trades off price against a soft preference,
+  so #1-by-price isn't automatically optimal.
+This is an **optional upgrade to the RL story**, not required for the
+training-infrastructure narrative (which is carried by the stable, observable,
+no-regression RLOO loop already demonstrated).
