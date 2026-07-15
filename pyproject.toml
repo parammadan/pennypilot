@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pennywise"
+version = "0.0.1"
+description = "Multi-turn RL cost-saving shopping agent — RLVR post-training pipeline (rollout → reward → RLOO → eval → checkpoint) on V100 + A10G."
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+# GPU/training deps live behind an extra so Phase 1 (env + reward + simulator)
+# stays installable + testable on a CPU-only laptop with no torch.
+train = [
+    "torch",
+    "transformers",
+    "peft",
+]
+dev = ["pytest"]
+
+# The package namespace stays `shoprl` (Phase-1 code + trainer.py + ARCHITECTURE.md
+# all import it); Pennywise is the project/repo, shoprl the vendored substrate it
+# evolves. Rename is deferred churn, tracked separately.
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

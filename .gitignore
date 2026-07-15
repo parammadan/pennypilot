@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtualenvs (anchored to repo root so they don't match src/shoprl/env/)
+/.venv/
+/venv/
+/env/
+
+# Local run artifacts (checkpoints go to S3; metrics regenerate)
+runs/
+checkpoints/
+outputs/
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
