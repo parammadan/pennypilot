@@ -1,0 +1,148 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pennywise — training & system dashboard</title>
+<style>
+:root{color-scheme:light dark}
+.viz-root{
+  --page:#f9f9f7; --surface-1:#fcfcfb; --text-primary:#0b0b0b; --text-secondary:#52514e;
+  --muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7; --series-1:#2a78d6;
+  --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --border:rgba(11,11,11,.10);
+  --band:rgba(42,120,214,.14);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--text-primary);
+  background:var(--page); min-height:100vh; margin:0;
+}
+:root[data-theme="dark"] .viz-root, @media (prefers-color-scheme:dark){
+  :root:where(:not([data-theme="light"])) .viz-root{
+    --page:#0d0d0d; --surface-1:#1a1a19; --text-primary:#fff; --text-secondary:#c3c2b7;
+    --muted:#898781; --grid:#2c2c2a; --axis:#383835; --series-1:#3987e5;
+    --border:rgba(255,255,255,.10); --band:rgba(57,135,229,.18);
+}}
+.wrap{max-width:1080px;margin:0 auto;padding:24px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:20px;margin:0}
+.meta{color:var(--muted);font-size:12px}
+.tabs{display:flex;gap:8px;margin:16px 0 8px}
+.tab{padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1);
+  color:var(--text-secondary);cursor:pointer;font-size:13px}
+.tab[aria-selected="true"]{color:var(--text-primary);border-color:var(--series-1);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.tile{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.tile .l{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.tile .v{font-size:26px;margin-top:4px}
+.tile .h{color:var(--text-secondary);font-size:12px;margin-top:2px}
+.tile.await .v{color:var(--muted)}
+.alerts{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.alert{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;
+  border:1px solid var(--border);background:var(--surface-1);font-size:13px}
+.alert .badge{display:inline-flex;align-items:center;gap:6px;font-weight:700;padding:2px 8px;border-radius:6px}
+.alert.good .badge{color:var(--good)} .alert.warning .badge{color:var(--warning)}
+.alert.critical .badge{color:var(--critical)}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px 14px 6px;margin:12px 0}
+.card h3{margin:0;font-size:14px} .card .sub{color:var(--muted);font-size:12px;margin:2px 0 6px}
+svg{width:100%;height:200px;display:block}
+.axis text{fill:var(--muted);font-size:10px} .grid line{stroke:var(--grid);stroke-width:1}
+.await-note{color:var(--muted);font-size:12px;padding:8px 0}
+.tog{cursor:pointer;border:1px solid var(--border);background:var(--surface-1);color:var(--text-secondary);
+  border-radius:8px;padding:4px 10px;font-size:12px}
+.hidden{display:none}
+.tt{position:fixed;pointer-events:none;background:var(--surface-1);border:1px solid var(--border);
+  border-radius:6px;padding:4px 8px;font-size:11px;color:var(--text-primary);opacity:0;transition:opacity .08s}
+</style></head>
+<body data-palette="#2a78d6"><div class="viz-root"><div class="wrap">
+<header>
+  <div><h1>Pennywise — training &amp; system dashboard</h1>
+  <div class="meta" id="meta"></div></div>
+  <button class="tog" id="tog">Toggle theme</button>
+</header>
+<div class="tabs">
+  <div class="tab" id="tab-train" aria-selected="true" onclick="showView('train')">Training dynamics</div>
+  <div class="tab" id="tab-sys" aria-selected="false" onclick="showView('sys')">System health</div>
+</div>
+<div id="view-train">
+  <div class="alerts" id="alerts"></div>
+  <div class="tiles" id="tiles"></div>
+  <div id="charts"></div>
+</div>
+<div id="view-sys" class="hidden">
+  <div class="await-note" id="sysnote"></div>
+  <div class="tiles" id="systiles"></div>
+</div>
+</div></div>
+<div class="tt" id="tt"></div>
+<script id="model" type="application/json">{"generated": "2026-07-15T17:53:37", "rloo_source": "replay", "rloo_steps": 50, "sft_source": "replay", "sft_steps": 250, "charts": [{"id": "kl", "title": "KL divergence vs. reference", "subtitle": "RLOO \u2014 per-step KL to the frozen SFT reference", "yfmt": ".4f", "threshold": 0.5, "threshold_label": "blowup \u2265 0.5", "points": [{"x": 0, "y": 0.0}, {"x": 1, "y": 0.0008060285238116194}, {"x": 2, "y": 0.0004186110152204492}, {"x": 3, "y": 0.0005220810835453449}, {"x": 4, "y": 0.0012029191157125751}, {"x": 5, "y": 0.0005883194762645871}, {"x": 6, "y": 0.000528184839822643}, {"x": 7, "y": 0.0007631790876985178}, {"x": 8, "y": 0.0009445011573916418}, {"x": 9, "y": 0.0011322605614623171}, {"x": 10, "y": 0.00135042575038824}, {"x": 11, "y": 0.0006400148440661724}, {"x": 12, "y": 0.0001475977444442833}, {"x": 13, "y": 0.0007671713883610209}, {"x": 14, "y": 0.0006509608210762963}, {"x": 15, "y": 0.0012462091026463895}, {"x": 16, "y": 0.000692145068114769}, {"x": 17, "y": 0.0025935856742762553}, {"x": 18, "y": 0.0013597288434539223}, {"x": 19, "y": 0.0003099507066508522}, {"x": 20, "y": 0.0009847044266280136}, {"x": 21, "y": 0.0008612052961325389}, {"x": 22, "y": 0.001150241042523703}, {"x": 23, "y": 0.0007313251726372982}, {"x": 24, "y": 0.0011207865306914755}, {"x": 25, "y": 0.0002061032264464302}, {"x": 26, "y": 0.0004751957753796887}, {"x": 27, "y": 0.0011481125102363876}, {"x": 28, "y": 0.0036872138675789756}, {"x": 29, "y": 0.001577977411216125}, {"x": 30, "y": 0.002010959690778691}, {"x": 31, "y": 0.0005756570162702701}, {"x": 32, "y": 0.000580358841943962}, {"x": 33, "y": 0.001270683062102762}, {"x": 34, "y": 0.0014371589932125062}, {"x": 35, "y": 0.0009380523083564185}, {"x": 36, "y": 0.0020714467063953634}, {"x": 37, "y": 0.0008586654753344192}, {"x": 38, "y": 0.0018218309633084573}, {"x": 39, "y": 0.0027205907886127534}, {"x": 40, "y": 0.003425753772717144}, {"x": 41, "y": 0.003574370148271555}, {"x": 42, "y": 0.0045298172835828154}, {"x": 43, "y": 0.0026431320529809454}, {"x": 44, "y": 0.003495564399599971}, {"x": 45, "y": 0.0011182821999682346}, {"x": 46, "y": 1.7389323943461932e-05}, {"x": 47, "y": 0.002672476396583079}, {"x": 48, "y": 0.0015273436629286152}, {"x": 49, "y": 0.0034796347108567716}]}, {"id": "reward", "title": "Reward vs. step", "subtitle": "RLOO \u2014 mean trajectory reward (\u00b11 std band)", "yfmt": ".3f", "points": [{"x": 0, "y": 0.8849499999999999, "lo": 0.4519372981077806, "hi": 1.317962701892219}, {"x": 1, "y": 0.77106925, "lo": 0.286946396273606, "hi": 1.255192103726394}, {"x": 2, "y": 1.038267, "lo": 0.7075480861169262, "hi": 1.368985913883074}, {"x": 3, "y": 0.7816445, "lo": 0.297521452624387, "hi": 1.265767547375613}, {"x": 4, "y": 1.2221113749999999, "lo": 1.2221108908770815, "hi": 1.2221118591229183}, {"x": 5, "y": 1.097111, "lo": 0.7663920861169262, "hi": 1.4278299138830737}, {"x": 6, "y": 1.213267, "lo": 1.213267, "hi": 1.213267}, {"x": 7, "y": 1.198289, "lo": 1.198289, "hi": 1.198289}, {"x": 8, "y": 1.057193, "lo": 0.7264740861169262, "hi": 1.387911913883074}, {"x": 9, "y": 1.022171, "lo": 0.6914520861169262, "hi": 1.3528899138830737}, {"x": 10, "y": 1.103674, "lo": 0.7729550861169262, "hi": 1.434392913883074}, {"x": 11, "y": 1.00031725, "lo": 0.5373106760723855, "hi": 1.4633238239276145}, {"x": 12, "y": 1.196069875, "lo": 1.1960695442810862, "hi": 1.1960702057189139}, {"x": 13, "y": 1.1517522500000001, "lo": 1.1517518169872982, "hi": 1.151752683012702}, {"x": 14, "y": 1.051976, "lo": 0.7212570861169262, "hi": 1.382694913883074}, {"x": 15, "y": 1.184019, "lo": 1.184019, "hi": 1.184019}, {"x": 16, "y": 1.142863, "lo": 1.142863, "hi": 1.142863}, {"x": 17, "y": 0.835893, "lo": 0.30674273778708183, "hi": 1.365043262212918}, {"x": 18, "y": 1.057193, "lo": 0.7264740861169262, "hi": 1.387911913883074}, {"x": 19, "y": 0.937816, "lo": 0.5048032981077807, "hi": 1.3708287018922194}, {"x": 20, "y": 1.100318, "lo": 0.7695990861169262, "hi": 1.4310369138830736}, {"x": 21, "y": 1.160545, "lo": 1.160545, "hi": 1.160545}, {"x": 22, "y": 1.232193, "lo": 1.232193, "hi": 1.232193}, {"x": 23, "y": 1.18781625, "lo": 1.187815816987298, "hi": 1.187816683012702}, {"x": 24, "y": 0.92531725, "lo": 0.4923046924451555, "hi": 1.3583298075548444}, {"x": 25, "y": 1.150579875, "lo": 1.1505795442810862, "hi": 1.1505802057189138}, {"x": 26, "y": 1.016825, "lo": 0.6861060861169263, "hi": 1.347543913883074}, {"x": 27, "y": 1.047111, "lo": 0.7163920861169262, "hi": 1.3778299138830736}, {"x": 28, "y": 0.913267, "lo": 0.4802542981077807, "hi": 1.3462797018922195}, {"x": 29, "y": 1.048696, "lo": 0.7179770861169262, "hi": 1.3794149138830738}, {"x": 30, "y": 1.097111, "lo": 0.7663920861169262, "hi": 1.4278299138830737}, {"x": 31, "y": 1.013798, "lo": 0.6830790861169261, "hi": 1.3445169138830737}, {"x": 32, "y": 1.073289, "lo": 0.7425700861169262, "hi": 1.4040079138830737}, {"x": 33, "y": 1.007193, "lo": 0.6764740861169262, "hi": 1.3379119138830737}, {"x": 34, "y": 1.031644625, "lo": 0.7009258528532796, "hi": 1.3623633971467204}, {"x": 35, "y": 1.156644, "lo": 1.156644, "hi": 1.156644}, {"x": 36, "y": 1.062817, "lo": 0.7320980861169262, "hi": 1.3935359138830736}, {"x": 37, "y": 1.064793, "lo": 0.7340740861169263, "hi": 1.395511913883074}, {"x": 38, "y": 1.141825, "lo": 1.141825, "hi": 1.141825}, {"x": 39, "y": 1.055411375, "lo": 0.7246926973444519, "hi": 1.3861300526555482}, {"x": 40, "y": 1.027945, "lo": 0.6972260861169263, "hi": 1.358663913883074}, {"x": 41, "y": 0.960545, "lo": 0.5275322981077807, "hi": 1.3935577018922194}, {"x": 42, "y": 1.163267625, "lo": 1.1632671408770818, "hi": 1.1632681091229182}, {"x": 43, "y": 1.15539, "lo": 1.15539, "hi": 1.15539}, {"x": 44, "y": 1.143916, "lo": 1.143916, "hi": 1.143916}, {"x": 45, "y": 1.13589275, "lo": 1.135892316987298, "hi": 1.135893183012702}, {"x": 46, "y": 1.15539, "lo": 1.15539, "hi": 1.15539}, {"x": 47, "y": 1.2132675000000002, "lo": 1.213267, "hi": 1.2132680000000002}, {"x": 48, "y": 1.20057925, "lo": 1.2005788169872982, "hi": 1.200579683012702}, {"x": 49, "y": 1.152944625, "lo": 1.1529441408770815, "hi": 1.1529451091229184}], "band": true}, {"id": "gradnorm", "title": "Policy stability (grad-norm)", "subtitle": "RLOO \u2014 pre-clip gradient norm per step", "yfmt": ".2f", "points": [{"x": 0, "y": 2.703125}, {"x": 1, "y": 4.5625}, {"x": 2, "y": 3.34375}, {"x": 3, "y": 3.78125}, {"x": 4, "y": 0.28515625}, {"x": 5, "y": 4.25}, {"x": 6, "y": 0.060302734375}, {"x": 7, "y": 0.09912109375}, {"x": 8, "y": 5.5625}, {"x": 9, "y": 3.3125}, {"x": 10, "y": 4.5625}, {"x": 11, "y": 4.34375}, {"x": 12, "y": 0.0191650390625}, {"x": 13, "y": 0.09033203125}, {"x": 14, "y": 2.90625}, {"x": 15, "y": 0.134765625}, {"x": 16, "y": 0.1494140625}, {"x": 17, "y": 5.9375}, {"x": 18, "y": 8.4375}, {"x": 19, "y": 4.0625}, {"x": 20, "y": 2.046875}, {"x": 21, "y": 0.107421875}, {"x": 22, "y": 0.1328125}, {"x": 23, "y": 0.09228515625}, {"x": 24, "y": 4.09375}, {"x": 25, "y": 0.022705078125}, {"x": 26, "y": 2.0}, {"x": 27, "y": 2.84375}, {"x": 28, "y": 6.15625}, {"x": 29, "y": 2.984375}, {"x": 30, "y": 2.59375}, {"x": 31, "y": 3.640625}, {"x": 32, "y": 2.859375}, {"x": 33, "y": 2.734375}, {"x": 34, "y": 1.859375}, {"x": 35, "y": 0.08154296875}, {"x": 36, "y": 3.515625}, {"x": 37, "y": 3.21875}, {"x": 38, "y": 0.1552734375}, {"x": 39, "y": 3.0625}, {"x": 40, "y": 3.40625}, {"x": 41, "y": 3.484375}, {"x": 42, "y": 0.30859375}, {"x": 43, "y": 0.2197265625}, {"x": 44, "y": 0.2451171875}, {"x": 45, "y": 0.08349609375}, {"x": 46, "y": 0.00106048583984375}, {"x": 47, "y": 0.189453125}, {"x": 48, "y": 0.1357421875}, {"x": 49, "y": 0.275390625}]}, {"id": "loss", "title": "SFT warmup loss", "subtitle": "supervised warmup \u2014 loss (agent-token masked)", "yfmt": ".3f", "points": [{"x": 1, "y": 3.01155686378479}, {"x": 2, "y": 2.1498379707336426}, {"x": 3, "y": 1.806575894355774}, {"x": 4, "y": 1.550202488899231}, {"x": 5, "y": 1.1934176683425903}, {"x": 6, "y": 0.9816203713417053}, {"x": 7, "y": 0.8064022660255432}, {"x": 8, "y": 0.7285096049308777}, {"x": 9, "y": 0.4713028073310852}, {"x": 10, "y": 0.3410922884941101}, {"x": 11, "y": 0.3089250326156616}, {"x": 12, "y": 0.12564745545387268}, {"x": 13, "y": 0.11113569140434265}, {"x": 14, "y": 0.13305625319480896}, {"x": 15, "y": 0.18228210508823395}, {"x": 16, "y": 0.10554476827383041}, {"x": 17, "y": 0.2356693148612976}, {"x": 18, "y": 0.14182265102863312}, {"x": 19, "y": 0.0283388402312994}, {"x": 20, "y": 0.04269168898463249}, {"x": 21, "y": 0.013663740828633308}, {"x": 22, "y": 0.09299938380718231}, {"x": 23, "y": 0.11378359794616699}, {"x": 24, "y": 0.08486178517341614}, {"x": 25, "y": 0.04571172595024109}, {"x": 26, "y": 0.1043112650513649}, {"x": 27, "y": 0.1270132064819336}, {"x": 28, "y": 0.13693594932556152}, {"x": 29, "y": 0.09395716339349747}, {"x": 30, "y": 0.43829160928726196}, {"x": 31, "y": 0.47120729088783264}, {"x": 32, "y": 0.11911673098802567}, {"x": 33, "y": 0.07791832089424133}, {"x": 34, "y": 0.39169806241989136}, {"x": 35, "y": 0.06483039259910583}, {"x": 36, "y": 0.09090195596218109}, {"x": 37, "y": 0.06575959920883179}, {"x": 38, "y": 0.12102273851633072}, {"x": 39, "y": 0.07852642238140106}, {"x": 40, "y": 0.0460774265229702}, {"x": 41, "y": 0.035553209483623505}, {"x": 42, "y": 0.04070271924138069}, {"x": 43, "y": 0.02822132594883442}, {"x": 44, "y": 0.27361178398132324}, {"x": 45, "y": 0.04409080371260643}, {"x": 46, "y": 0.01764201559126377}, {"x": 47, "y": 0.06678599864244461}, {"x": 48, "y": 0.012512926012277603}, {"x": 49, "y": 0.01970030926167965}, {"x": 50, "y": 0.03843842074275017}, {"x": 51, "y": 0.030715998262166977}, {"x": 52, "y": 0.07747194916009903}, {"x": 53, "y": 0.07969912886619568}, {"x": 54, "y": 0.05742969363927841}, {"x": 55, "y": 0.03895242139697075}, {"x": 56, "y": 0.24448631703853607}, {"x": 57, "y": 0.09821439534425735}, {"x": 58, "y": 0.1391371488571167}, {"x": 59, "y": 0.07210934907197952}, {"x": 60, "y": 0.0699511170387268}, {"x": 61, "y": 0.06470458209514618}, {"x": 62, "y": 0.03453384339809418}, {"x": 63, "y": 0.08809801191091537}, {"x": 64, "y": 0.09557592868804932}, {"x": 65, "y": 0.0434049591422081}, {"x": 66, "y": 0.04929732903838158}, {"x": 67, "y": 0.04201629385352135}, {"x": 68, "y": 0.03698348626494408}, {"x": 69, "y": 0.041064564138650894}, {"x": 70, "y": 0.035319916903972626}, {"x": 71, "y": 0.08393286913633347}, {"x": 72, "y": 0.10569553822278976}, {"x": 73, "y": 0.10325773805379868}, {"x": 74, "y": 0.03481803834438324}, {"x": 75, "y": 0.03184888884425163}, {"x": 76, "y": 0.035983212292194366}, {"x": 77, "y": 0.07308141142129898}, {"x": 78, "y": 0.07485087215900421}, {"x": 79, "y": 0.3755781352519989}, {"x": 80, "y": 0.08629853278398514}, {"x": 81, "y": 0.08103584498167038}, {"x": 82, "y": 0.02990122325718403}, {"x": 83, "y": 0.02582257054746151}, {"x": 84, "y": 0.025209181010723114}, {"x": 85, "y": 0.3490948975086212}, {"x": 86, "y": 0.023776162415742874}, {"x": 87, "y": 0.032825421541929245}, {"x": 88, "y": 0.06735590845346451}, {"x": 89, "y": 0.01950339414179325}, {"x": 90, "y": 0.13663022220134735}, {"x": 91, "y": 0.018604105338454247}, {"x": 92, "y": 0.04162202775478363}, {"x": 93, "y": 0.02147401124238968}, {"x": 94, "y": 0.06977707892656326}, {"x": 95, "y": 0.09674118459224701}, {"x": 96, "y": 0.07659434527158737}, {"x": 97, "y": 0.020040256902575493}, {"x": 98, "y": 0.045677606016397476}, {"x": 99, "y": 0.055674631148576736}, {"x": 100, "y": 0.1164843812584877}, {"x": 101, "y": 0.033378902822732925}, {"x": 102, "y": 0.11930964142084122}, {"x": 103, "y": 0.11433424800634384}, {"x": 104, "y": 0.12573273479938507}, {"x": 105, "y": 0.07411562651395798}, {"x": 106, "y": 0.04125282168388367}, {"x": 107, "y": 0.11044225096702576}, {"x": 108, "y": 0.04138384386897087}, {"x": 109, "y": 0.042112085968256}, {"x": 110, "y": 0.27008381485939026}, {"x": 111, "y": 0.1485714316368103}, {"x": 112, "y": 0.12865599989891052}, {"x": 113, "y": 0.032655712217092514}, {"x": 114, "y": 0.10954851657152176}, {"x": 115, "y": 0.04641003906726837}, {"x": 116, "y": 0.02463465742766857}, {"x": 117, "y": 0.06478800624608994}, {"x": 118, "y": 0.023984750732779503}, {"x": 119, "y": 0.03910437971353531}, {"x": 120, "y": 0.033463381230831146}, {"x": 121, "y": 0.07738586515188217}, {"x": 122, "y": 0.04044030234217644}, {"x": 123, "y": 0.021724967285990715}, {"x": 124, "y": 0.025284290313720703}, {"x": 125, "y": 0.06695780903100967}, {"x": 126, "y": 0.020534507930278778}, {"x": 127, "y": 0.06919097155332565}, {"x": 128, "y": 0.12912367284297943}, {"x": 129, "y": 0.06977158039808273}, {"x": 130, "y": 0.0352957546710968}, {"x": 131, "y": 0.06282196938991547}, {"x": 132, "y": 0.027852335944771767}, {"x": 133, "y": 0.06992886960506439}, {"x": 134, "y": 0.07423849403858185}, {"x": 135, "y": 0.037912070751190186}, {"x": 136, "y": 0.11019398272037506}, {"x": 137, "y": 0.034726351499557495}, {"x": 138, "y": 0.09491173177957535}, {"x": 139, "y": 0.07405127584934235}, {"x": 140, "y": 0.05033038929104805}, {"x": 141, "y": 0.054461363703012466}, {"x": 142, "y": 0.10358119755983353}, {"x": 143, "y": 0.041889067739248276}, {"x": 144, "y": 0.0750507041811943}, {"x": 145, "y": 0.047315195202827454}, {"x": 146, "y": 0.047858092933893204}, {"x": 147, "y": 0.13076621294021606}, {"x": 148, "y": 0.048936113715171814}, {"x": 149, "y": 0.03246292471885681}, {"x": 150, "y": 0.031078645959496498}, {"x": 151, "y": 0.07672897726297379}, {"x": 152, "y": 0.033314645290374756}, {"x": 153, "y": 0.024601329118013382}, {"x": 154, "y": 0.04839659109711647}, {"x": 155, "y": 0.03877666965126991}, {"x": 156, "y": 0.03241775184869766}, {"x": 157, "y": 0.027715010568499565}, {"x": 158, "y": 0.018979348242282867}, {"x": 159, "y": 0.0706377699971199}, {"x": 160, "y": 0.06941750645637512}, {"x": 161, "y": 0.0762379840016365}, {"x": 162, "y": 0.020221982151269913}, {"x": 163, "y": 0.046542227268218994}, {"x": 164, "y": 0.07055328786373138}, {"x": 165, "y": 0.023001639172434807}, {"x": 166, "y": 0.11711612343788147}, {"x": 167, "y": 0.020272189751267433}, {"x": 168, "y": 0.018227294087409973}, {"x": 169, "y": 0.02253585308790207}, {"x": 170, "y": 0.015743890777230263}, {"x": 171, "y": 0.07437015324831009}, {"x": 172, "y": 0.05297597870230675}, {"x": 173, "y": 0.01600457914173603}, {"x": 174, "y": 0.05362600460648537}, {"x": 175, "y": 0.08349970728158951}, {"x": 176, "y": 0.05566384643316269}, {"x": 177, "y": 0.08980303257703781}, {"x": 178, "y": 0.07386085391044617}, {"x": 179, "y": 0.08358713239431381}, {"x": 180, "y": 0.1138930469751358}, {"x": 181, "y": 0.027476716786623}, {"x": 182, "y": 0.03522660210728645}, {"x": 183, "y": 0.04298067092895508}, {"x": 184, "y": 0.08199925720691681}, {"x": 185, "y": 0.04030425101518631}, {"x": 186, "y": 0.13339868187904358}, {"x": 187, "y": 0.0706656202673912}, {"x": 188, "y": 0.041684769093990326}, {"x": 189, "y": 0.034719932824373245}, {"x": 190, "y": 0.03932177647948265}, {"x": 191, "y": 0.031291332095861435}, {"x": 192, "y": 0.06469650566577911}, {"x": 193, "y": 0.05280369520187378}, {"x": 194, "y": 0.05515997111797333}, {"x": 195, "y": 0.058805182576179504}, {"x": 196, "y": 0.12329456210136414}, {"x": 197, "y": 0.039460454136133194}, {"x": 198, "y": 0.06528535485267639}, {"x": 199, "y": 0.02771703712642193}, {"x": 200, "y": 0.03355053812265396}, {"x": 201, "y": 0.029757188633084297}, {"x": 202, "y": 0.04197055846452713}, {"x": 203, "y": 0.1295844316482544}, {"x": 204, "y": 0.11513536423444748}, {"x": 205, "y": 0.0365205742418766}, {"x": 206, "y": 0.11294398456811905}, {"x": 207, "y": 0.09015002846717834}, {"x": 208, "y": 0.028523702174425125}, {"x": 209, "y": 0.07040741294622421}, {"x": 210, "y": 0.02745254524052143}, {"x": 211, "y": 0.0332515686750412}, {"x": 212, "y": 0.0366859994828701}, {"x": 213, "y": 0.0962434858083725}, {"x": 214, "y": 0.03305952250957489}, {"x": 215, "y": 0.11901458352804184}, {"x": 216, "y": 0.03327186033129692}, {"x": 217, "y": 0.07089605182409286}, {"x": 218, "y": 0.027955958619713783}, {"x": 219, "y": 0.022428620606660843}, {"x": 220, "y": 0.03759727254509926}, {"x": 221, "y": 0.07007116079330444}, {"x": 222, "y": 0.06659160554409027}, {"x": 223, "y": 0.03633558005094528}, {"x": 224, "y": 0.10376987606287003}, {"x": 225, "y": 0.07722622901201248}, {"x": 226, "y": 0.07156325876712799}, {"x": 227, "y": 0.10646455734968185}, {"x": 228, "y": 0.04842956364154816}, {"x": 229, "y": 0.07853209227323532}, {"x": 230, "y": 0.06721958518028259}, {"x": 231, "y": 0.03979023918509483}, {"x": 232, "y": 0.03308078274130821}, {"x": 233, "y": 0.065270334482193}, {"x": 234, "y": 0.06409084051847458}, {"x": 235, "y": 0.08297382295131683}, {"x": 236, "y": 0.08285301923751831}, {"x": 237, "y": 0.06141892075538635}, {"x": 238, "y": 0.11275345087051392}, {"x": 239, "y": 0.09190987050533295}, {"x": 240, "y": 0.06039652228355408}, {"x": 241, "y": 0.0990806519985199}, {"x": 242, "y": 0.05936195328831673}, {"x": 243, "y": 0.02755468152463436}, {"x": 244, "y": 0.04015446826815605}, {"x": 245, "y": 0.11669135093688965}, {"x": 246, "y": 0.026552891358733177}, {"x": 247, "y": 0.0326259508728981}, {"x": 248, "y": 0.040181420743465424}, {"x": 249, "y": 0.05321703478693962}, {"x": 250, "y": 0.06932929903268814}]}], "tiles": [{"label": "Final KL", "value": "0.0035", "hint": "max 0.0045"}, {"label": "Mean reward", "value": "+1.075", "hint": "final +1.153"}, {"label": "Ask-rate", "value": "1.00", "hint": "clarify before recommend"}, {"label": "Violation-rate", "value": "0.00", "hint": "added w/o permission"}, {"label": "SFT loss", "value": "0.069", "hint": "from 3.01"}], "alerts": [{"rule": "KL blowup", "level": "good", "icon": "\u2713", "msg": "KL bounded (max 0.0045 \u226a 0.5) \u2014 stable, RLOO-regime"}, {"rule": "Reward stall", "level": "good", "icon": "\u2713", "msg": "reward moving (last-window \u0394 +0.125)"}], "system": {"live": false, "source": "aws-cloudwatch", "tiles": [{"label": "Rollout throughput", "unit": "traj/sec", "value": null}, {"label": "GPU utilization", "unit": "%", "value": null}, {"label": "Agent-gens throughput", "unit": "gen/sec", "value": null}]}}</script>
+<script>
+const M=JSON.parse(document.getElementById('model').textContent);
+document.getElementById('meta').textContent=
+  `RLOO ${M.rloo_steps} steps (${M.rloo_source}) · SFT ${M.sft_steps} steps (${M.sft_source}) · generated ${M.generated}`;
+const cs=getComputedStyle(document.querySelector('.viz-root'));
+function col(n){return cs.getPropertyValue(n).trim()}
+// alerts
+document.getElementById('alerts').innerHTML=M.alerts.map(a=>
+  `<div class="alert ${a.level}"><span class="badge">${a.icon} ${a.level.toUpperCase()}</span>
+   <b>${a.rule}</b> — ${a.msg}</div>`).join('');
+// tiles
+document.getElementById('tiles').innerHTML=M.tiles.map(t=>
+  `<div class="tile"><div class="l">${t.label}</div><div class="v">${t.value}</div><div class="h">${t.hint||''}</div></div>`).join('');
+// system tiles (placeholders)
+document.getElementById('sysnote').textContent = M.system.live
+  ? `Live system metrics from ${M.system.source}.`
+  : `System-health panels are live-ready placeholders — awaiting live data (connect AWSMetricsSource: A10G rollout throughput + GPU util from Steps 2–3).`;
+document.getElementById('systiles').innerHTML=M.system.tiles.map(t=>
+  `<div class="tile ${M.system.live?'':'await'}"><div class="l">${t.label} (${t.unit})</div>
+   <div class="v">${M.system.live? t.value : 'awaiting'}</div>
+   <div class="h">${M.system.live?'':'populates when live source connected'}</div></div>`).join('');
+// charts
+const W=980,H=200,PL=48,PR=14,PT=12,PB=26;
+function chart(c){
+  const pts=c.points; if(!pts.length) return '';
+  const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
+  let ymin=Math.min(...ys), ymax=Math.max(...ys);
+  if(c.band){ymin=Math.min(ymin,...pts.map(p=>p.lo)); ymax=Math.max(ymax,...pts.map(p=>p.hi));}
+  if(c.threshold!=null) ymax=Math.max(ymax,c.threshold);
+  const xmin=Math.min(...xs), xmax=Math.max(...xs);
+  const pad=(ymax-ymin)*0.08||1; ymin-=pad; ymax+=pad;
+  const X=x=>PL+(xmax===xmin?0:(x-xmin)/(xmax-xmin))*(W-PL-PR);
+  const Y=y=>PT+(1-(y-ymin)/(ymax-ymin))*(H-PT-PB);
+  const line=pts.map((p,i)=>`${i?'L':'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ');
+  // gridlines (recessive) + y ticks
+  let grid='',ticks='';
+  for(let i=0;i<=4;i++){const yy=ymin+(ymax-ymin)*i/4; const py=Y(yy);
+    grid+=`<line x1="${PL}" y1="${py.toFixed(1)}" x2="${W-PR}" y2="${py.toFixed(1)}"/>`;
+    ticks+=`<text x="${PL-6}" y="${(py+3).toFixed(1)}" text-anchor="end">${fmt(yy,c.yfmt)}</text>`;}
+  // x ticks (first,last)
+  ticks+=`<text x="${X(xmin)}" y="${H-8}" text-anchor="start">step ${xmin}</text>`+
+         `<text x="${W-PR}" y="${H-8}" text-anchor="end">step ${xmax}</text>`;
+  let band=''; if(c.band){const up=pts.map((p,i)=>`${i?'L':'M'}${X(p.x).toFixed(1)},${Y(p.hi).toFixed(1)}`).join(' ');
+    const dn=pts.slice().reverse().map(p=>`L${X(p.x).toFixed(1)},${Y(p.lo).toFixed(1)}`).join(' ');
+    band=`<path d="${up} ${dn} Z" fill="var(--band)" stroke="none"/>`;}
+  let thr=''; if(c.threshold!=null){const ty=Y(c.threshold);
+    thr=`<line x1="${PL}" y1="${ty.toFixed(1)}" x2="${W-PR}" y2="${ty.toFixed(1)}" stroke="var(--critical)" stroke-width="1.5" stroke-dasharray="4 4"/>
+         <text x="${W-PR}" y="${(ty-4).toFixed(1)}" text-anchor="end" fill="var(--critical)">${c.threshold_label||''}</text>`;}
+  const dots=pts.map(p=>`<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="0" data-x="${p.x}" data-y="${p.y}"/>`).join('');
+  return `<div class="card"><h3>${c.title}</h3><div class="sub">${c.subtitle}</div>
+    <svg viewBox="0 0 ${W} ${H}" data-yfmt="${c.yfmt}" onmousemove="hov(event,this)" onmouseleave="document.getElementById('tt').style.opacity=0">
+    <g class="grid">${grid}${thr}</g><g class="axis">${ticks}</g>
+    ${band}<path d="${line}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>
+    <g class="pts">${dots}</g><line class="cross hidden" stroke="var(--axis)" stroke-width="1"/></svg></div>`;
+}
+function fmt(v,f){if(f==='.4f')return v.toFixed(4); if(f==='.3f')return v.toFixed(3); if(f==='.2f')return v.toFixed(2); return v.toFixed(2);}
+function hov(e,svg){const r=svg.getBoundingClientRect(); const pts=[...svg.querySelectorAll('.pts circle')];
+  if(!pts.length)return; const sx=W/r.width;
+  const mx=(e.clientX-r.left)*sx; let best=null,bd=1e9;
+  pts.forEach(c=>{const cx=+c.getAttribute('cx'); const d=Math.abs(cx-mx); if(d<bd){bd=d;best=c;}});
+  if(!best)return; const cx=+best.getAttribute('cx'),cy=+best.getAttribute('cy');
+  const cr=svg.querySelector('.cross'); cr.classList.remove('hidden');
+  cr.setAttribute('x1',cx);cr.setAttribute('x2',cx);cr.setAttribute('y1',PT);cr.setAttribute('y2',H-PB);
+  const tt=document.getElementById('tt'); tt.style.opacity=1;
+  tt.style.left=(e.clientX+12)+'px'; tt.style.top=(e.clientY-10)+'px';
+  tt.textContent=`step ${best.getAttribute('data-x')} · ${fmt(+best.getAttribute('data-y'),svg.getAttribute('data-yfmt'))}`;}
+document.getElementById('charts').innerHTML=M.charts.map(chart).join('');
+function showView(v){const t=v==='train';
+  document.getElementById('view-train').classList.toggle('hidden',!t);
+  document.getElementById('view-sys').classList.toggle('hidden',t);
+  document.getElementById('tab-train').setAttribute('aria-selected',t);
+  document.getElementById('tab-sys').setAttribute('aria-selected',!t);}
+document.getElementById('tog').onclick=()=>{const r=document.documentElement;
+  const cur=r.getAttribute('data-theme'); r.setAttribute('data-theme', cur==='dark'?'light':'dark');
+  document.getElementById('charts').innerHTML=M.charts.map(chart).join('');};
+</script></body></html>
