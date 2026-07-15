@@ -23,19 +23,29 @@ def demo_to_messages(demo: Demo) -> list[dict]:
     return [{"role": _ROLE[t.role], "content": t.text} for t in demo.turns]
 
 
+def encode(tokenizer, messages: list[dict], add_generation_prompt: bool) -> list[int]:
+    """Chat-template -> flat list of token ids. Robust to transformers versions
+    where apply_chat_template(tokenize=True) returns a dict (input_ids +
+    attention_mask) rather than a bare list."""
+    out = tokenizer.apply_chat_template(
+        messages, tokenize=True, add_generation_prompt=add_generation_prompt)
+    if isinstance(out, dict):
+        out = out["input_ids"]
+    if out and isinstance(out[0], list):  # accidental batch nesting
+        out = out[0]
+    return list(out)
+
+
 def build_example(tokenizer, demo: Demo, max_len: int) -> dict:
     """Return {input_ids, labels} with labels = -100 except on agent spans."""
     messages = demo_to_messages(demo)
-    full = tokenizer.apply_chat_template(messages, tokenize=True,
-                                         add_generation_prompt=False)
+    full = encode(tokenizer, messages, add_generation_prompt=False)
     labels = [-100] * len(full)
     for i, msg in enumerate(messages):
         if msg["role"] != "assistant":
             continue
-        prefix = tokenizer.apply_chat_template(messages[:i], tokenize=True,
-                                               add_generation_prompt=True)
-        upto = tokenizer.apply_chat_template(messages[:i + 1], tokenize=True,
-                                             add_generation_prompt=False)
+        prefix = encode(tokenizer, messages[:i], add_generation_prompt=True)
+        upto = encode(tokenizer, messages[:i + 1], add_generation_prompt=False)
         for j in range(len(prefix), min(len(upto), len(full))):
             labels[j] = full[j]
     return {"input_ids": full[:max_len], "labels": labels[:max_len]}

@@ -30,8 +30,10 @@ _GRAMMAR = re.compile(
 
 @torch.no_grad()
 def _gen_action(model, tok, messages, device, max_new_tokens=24) -> str:
-    ids = tok.apply_chat_template(messages, add_generation_prompt=True,
-                                  return_tensors="pt").to(device)
+    enc = tok.apply_chat_template(messages, add_generation_prompt=True,
+                                  tokenize=True, return_tensors="pt")
+    ids = enc["input_ids"] if isinstance(enc, dict) else enc
+    ids = ids.to(device)
     out = model.generate(ids, max_new_tokens=max_new_tokens, do_sample=False,
                          pad_token_id=tok.pad_token_id)
     return tok.decode(out[0, ids.shape[1]:], skip_special_tokens=True).strip()
