@@ -48,6 +48,15 @@ class TrainingConfig(BaseModel):
     clip_eps: float = 0.2       # PPO trust-region width
     beta: float = 0.04          # KL penalty coefficient
     max_grad_norm: float = 1.0
+    # Fine-tuning method: "full" (Pennywise target on V100 32GB — fits, measured)
+    # or "lora" (the measured fallback if sequences ever exceed the profiled
+    # OOM wall). See PHASE2_NOTES.md B1/B4 and runs/profile_v100.json.
+    finetune: Literal["full", "lora"] = "lora"
+    # Multi-turn sizing, set from measurement (scripts/profile_v100.py + demo
+    # token-length: max dialogue 221 tokens). max_turns bounds the conversation
+    # (=> sequence length => attention memory, quadratic on Volta).
+    max_turns: int = 12
+    max_len: int = 512
     # LoRA: only these adapter params get gradients + optimizer state.
     lora_r: int = 8
     lora_alpha: int = 16

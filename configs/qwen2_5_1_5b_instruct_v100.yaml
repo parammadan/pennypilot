@@ -1,0 +1,45 @@
+# Qwen2.5-1.5B-Instruct, FULL fine-tune, on a Tesla V100-SXM2-32GB (fp16, Volta —
+# no bf16 tensor cores, no FlashAttention).
+#
+# Every number here is set from MEASUREMENT, not guessed (PHASE2_NOTES.md rule):
+#   - Demo dialogues tokenize to max 221 tokens (p99 215) under the Qwen chat
+#     template -> max_len 512 is a generous 2.3x ceiling.
+#   - Profiling (scripts/profile_v100.py -> runs/profile_v100.json): full-FT
+#     fixed footprint (policy + frozen KL ref + grads + AdamW fp16 states + ctx)
+#     = 18.57 GB; batch1xseq1024 = 19.4 GB, batch4xseq512 = 25 GB (under a 30 GB
+#     cap). The OOM wall is ~seq 3072 @ batch 1 (activation memory is quadratic
+#     without FlashAttention) — far above our short dialogues.
+#   - Conclusion: full fine-tune FITS multi-turn comfortably; LoRA NOT needed.
+experiment:
+  name: pennywise-qwen1.5b
+  seed: 0
+
+model:
+  name: Qwen/Qwen2.5-1.5B-Instruct   # instruct base: conversational before RL
+  dtype: float16                     # Volta => fp16 (bf16 is emulated, no speedup)
+  device: cuda
+
+algorithm: rloo
+
+rollout:
+  engine: hf
+  max_new_tokens: 32                 # one agent action per turn is short
+  temperature: 1.0
+  num_samples: 8                     # RLOO group size k=8. NOTE: full-FT cannot
+                                     # forward all 8 trajectories at once (would
+                                     # exceed the cap) -> the RLOO loop must
+                                     # micro-batch / grad-accumulate over the
+                                     # group (PHASE2_NOTES, next round).
+
+training:
+  finetune: full
+  max_turns: 12                      # ~5-7 agent turns for a full trajectory + headroom
+  max_len: 512                       # >> measured max dialogue (221 tokens)
+  steps: 50                          # first RLOO run = 50 OBSERVED steps, then scale
+  prompts_per_step: 1
+  lr: 1.0e-6                         # full-FT RL: small LR (SFT warmup uses ~1e-5)
+  beta: 0.04                         # KL-to-SFT-reference coefficient (stability lever)
+  max_grad_norm: 1.0
+  catalog_size: 500
+  ckpt_dir: /scratch/madan.pa/pennywise/ckpts
+  save_every: 10
