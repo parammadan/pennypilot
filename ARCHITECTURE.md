@@ -1,297 +1,181 @@
-# ShopRL Fabric — Architecture
+# Pennywise — Architecture
 
-A single-machine, production-style RL post-training platform. Real training flows
-through the platform; the platform is not a side-car. Scope is deliberately one
-laptop + one occasional cloud GPU — every "distributed" behaviour is local
-processes, labelled as such, with a documented scale-out path.
+A multi-turn RL post-training **pipeline** — rollout → reward → RLOO
+optimization → eval → checkpoint — validated on a cost-saving shopping agent. The
+**pipeline is the deliverable**; the shopping agent is the workload that exercises
+it. The framing target is training-system engineering (stability, observability,
+efficiency), not the agent product.
 
-## 1. Component map
+## Provenance (honest)
 
-```
-                         ┌────────────┐
-                         │ Ops console │  (Streamlit, HTTP-only)
-                         └─────┬───────┘
-                               │ REST
-                         ┌─────▼───────┐
-                         │  FastAPI    │  api.py  (validated boundary)
-                         └─────┬───────┘
-              submit_training  │  reads (overview/scheduler/registries)
-                         ┌─────▼───────┐
-                         │  JobStore   │  jobs.db  (state machine + queue)
-                         └─────┬───────┘
-                    admit      │  claim_priority (gpu slot)
-                         ┌─────▼───────┐
-                         │  Scheduler  │  gpu_slots / priority / backfill
-                         └─────┬───────┘
-             serve_pending     │  reap → admit → heartbeat → run → complete/fail
-                         ┌─────▼───────────────┐
-                         │  Worker (control.py) │  in-process, gpu_slots=1
-                         └─────┬───────────────┘
-                    run_through_platform (the ONE path)
-        ┌──────────────────────┼───────────────────────────────┐
-        ▼            ▼          ▼            ▼          ▼         ▼
-   Preflight   RLTrainer   Checkpoint    Policy    Trajectory  Experiment
-   (fail-fast) (GRPO/RLOO  Registry      Registry  Store       Registry
-               /PPO)       (atomic+sha)  (v{n})    (tagged)    (RunRecord)
-                               │            │          │          │
-                               └──────── Artifact Registry (lineage DAG) ┘
-                                            │
-                                      Metrics (metrics.jsonl) → RL-metrics dashboard
-```
+Pennywise **evolves the multi-turn substrate of `shoprl-fabric`** by adding the
+three things that make the task teach clarification and safety:
 
-There is **one** execution path: API → JobStore → Scheduler → Worker →
-`run_through_platform` → RLTrainer + registries. The `shoprl.rl.run` CLI is the
-direct single-run entry and calls the *same* `run_through_platform`; it is not an
-alternate path (the previous `--no-platform` branch was removed).
+1. **hidden needs** — the shopper's budget and must-have are not stated, so the
+   agent must *ask* to discover them;
+2. a **permission gate** — the agent may only add to the cart after an explicit
+   user accept; and
+3. an **info-gain reward** — a dense per-turn signal for a clarifying question
+   that reduces uncertainty about the hidden need.
 
-## 2. Job lifecycle (state machine)
+Reused from `shoprl-fabric` (single machine → this repo, vendored): the frozen
+catalog generator, the verifiable rule-reward pattern, the RLOO-from-GRPO
+adaptation, and the trajectory credit-assignment structure. **What this repo
+reports is only what this project measures.** ShopRL's KL numbers (RLOO KL 0.015
+vs PPO 6.78) are cited only as the *reason* RLOO was chosen — they are not
+presented as Pennywise's results.
+
+## 1. Three planes
 
 ```
-            submit
-              │
-              ▼
-          ┌────────┐  claim (scheduler)   ┌─────────┐  complete   ┌───────────┐
-          │PENDING │ ───────────────────▶ │ RUNNING │ ──────────▶ │ SUCCEEDED │ (terminal)
-          └───┬────┘                      └────┬────┘             └───────────┘
-              │ pause                          │ fail (atomic)
-              ▼                                 │
-          ┌────────┐  resume                    ├─▶ PENDING  (attempts < max, requeue)
-          │ PAUSED │ ──▶ PENDING                └─▶ DEAD_LETTER (attempts ≥ max) (terminal)
-          └───┬────┘
-              │ cancel
-              ▼
-          CANCELLED (terminal)          [RUNNING/PENDING/PAUSED → CANCELLED]
+  ┌──────────────────────────── ENVIRONMENT PLANE (Phase 1, done, CPU) ───────────────────────────┐
+  │  catalog (frozen, verifiable)  ──►  scenario generator (hidden budget + must-have)             │
+  │                                       │                                                        │
+  │  user-simulator ── two strictly separate seams:                                                │
+  │     • ConversationModel  (generation; ScriptedConversation now, FrozenLLMConversation later)   │
+  │     • judge_accept       (judgment; rule-based, the ONLY accept/reject authority)              │
+  │                                       │                                                        │
+  │  PennyEnv (ASK / RECOMMEND / ASK_PERMISSION / ADD_TO_CART) + verifiable reward + info-gain      │
+  └───────────────────────────────────────┬────────────────────────────────────────────────────┘
+                                           │ trajectories + verifiable reward
+  ┌──────────────────────────── TRAINING PLANE (Phase 2, designed) ──────────────────────────────┐
+  │  SFT warmup (1k synthetic demos)  ──►  multi-turn RLOO loop:                                   │
+  │     reset simulator to identical hidden-state → sample k=8 full conversations                  │
+  │     → verifiable reward per trajectory → leave-one-out advantage → KL-controlled update        │
+  │     → checkpoint                                                                               │
+  └───────────────────────────────────────┬────────────────────────────────────────────────────┘
+                                           │ checkpoints (S3), metrics.jsonl
+  ┌──────────────────────────── INFRASTRUCTURE PLANE (Phase 3, designed) ─────────────────────────┐
+  │  1× V100 32GB (fp16 train, SLURM)  ──S3──►  2× A10G (bf16 vLLM rollout, spot)                  │
+  │  observability: metrics.jsonl per step (KL, reward, throughput, GPU util) → dashboard          │
+  │  reliability: checkpoint/resume across SLURM preemption + spot interruption                    │
+  └───────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Transitions are validated** against an explicit graph (`jobs.py::_TRANSITIONS`)
-  and applied **atomically** with an optimistic guard
-  (`UPDATE … WHERE id=? AND state=?`) — a lost race yields `ConcurrentModification`.
-- **`fail()` is a single atomic write.** The logical path
-  `RUNNING → FAILED → (RETRYING → PENDING | DEAD_LETTER)` is validated edge-by-edge
-  but only the *final* state is persisted in one guarded `UPDATE`. A crash cannot
-  strand a job in an intermediate state (this was the pre-hardening bug).
-- The only non-terminal state a crashed worker can leave is `RUNNING`; the reaper
-  covers it (below).
+Only the **environment plane** is built and tested (CPU, no GPU). The training and
+infrastructure planes are designed; see `PHASE2_NOTES.md` for the concrete
+blockers to clear before the first GPU run.
 
-## 3. Worker & recovery flow (leases + heartbeat + reaper — all wired)
+## 2. Hidden-need environment
 
-```
-serve_pending(scheduler):                         # control.py — one pass
-  1. reap_expired()          RUNNING jobs whose lease expired → fail() → requeue
-  2. schedule()              admit PENDING jobs within gpu_slots (priority, backfill)
-  3. renew_lease(TRAIN_LEASE=120s)                # size the lease to the job
-  4. with _Heartbeat(...):   background thread renews the lease every LEASE/3
-         run_through_platform(...)                # real training
-  5. complete() | fail()                          # release the slot
-```
+`env/scenario.py` samples a `Scenario` = `{category, hidden_budget, must_have}`
+plus a deliberately vague opening utterance that mentions **neither**. The full
+hidden constraint set is derived from the catalog, so "valid" is a verifiable
+ground-truth predicate (`valid_skus`), not a judgment call.
 
-- **Lease + heartbeat + reaper is the complete loop.** A healthy long job (minutes)
-  is kept alive by the heartbeat; a dead worker stops heartbeating, its lease
-  expires within ~`TRAIN_LEASE` seconds, and the next `serve_pending` pass reaps
-  and requeues it. All three are invoked on the real path (verified in
-  `tests/test_hardening.py`), not decorative.
-- **Bounded retry → dead-letter**: reaps/failures bump `attempts`; at
-  `max_attempts` the job dead-letters (no infinite reap loop).
-- **Cancel vs complete**: a cancel during execution makes `complete()` raise
-  `InvalidTransition`, which the worker treats as a benign "cancelled", not a
-  failure.
-- **Graceful shutdown**: `serve_forever(drain_and_exit=True)` returns when the
-  queue is empty; a hard kill leaves at most one `RUNNING` job, reclaimed by the
-  reaper on restart.
+- **Undiscoverable without asking, by construction.** The opener leaks no
+  number and no feature; the simulator reveals a field only in response to a
+  relevant clarifying question. So asking is the reward-maximizing strategy
+  *structurally* — the information needed to pick a valid, cheapest item is not
+  on the table until the agent asks for it.
+- **Valid-set size is a tunable knob** (`valid_target_range`, default dozens),
+  because `value_quality` grades by price-rank among valid items: a valid set of
+  size ~2 collapses that into a near-binary signal, so we size it to dozens to
+  keep "cheapest valid" a meaningful ranking with real gradient.
 
-## 4. Checkpoint lifecycle (single authoritative writer)
+`env/pennyenv.py` (`PennyEnv`) owns the conversation state machine over the
+action grammar `ASK[budget|feature] | RECOMMEND[SKU] | ASK_PERMISSION[SKU?] |
+ADD_TO_CART[SKU]`, and delegates the two simulator seams (§4).
+
+## 3. Permission gate + info-gain reward
+
+Per completed trajectory (`env/reward.py::pennywise_reward`):
 
 ```
-trainer.model.save_pretrained(TEMP)  →  CheckpointRegistry.save(TEMP)
-                                          │  _atomic.atomic_ingest:
-                                          │    stage → sha256 each → manifest → fsync
-                                          │    → os.replace(staging → final)   [commit]
-                                          ▼
-                                      READY checkpoint  (verify() re-hashes on resume)
+R = 0.4·value_quality + 0.4·accepted + 0.2·asked_permission
+    − 1.0·acted_without_permission + Σ per_turn_info_gain
 ```
 
-- The **CheckpointRegistry is the only authoritative checkpoint writer.** The
-  trainer serialises the adapter to a temp dir; the registry atomically ingests
-  it; the temp dir is deleted. There is no persistent `save_pretrained` outside
-  the registry, and the mid-training periodic save (which bypassed the registry)
-  was removed.
-- `atomic_ingest` (`_atomic.py`) is shared by the checkpoint **and** policy
-  registries — the crash-safe write is implemented once.
-- Corruption/truncation is detected by re-hashing against the manifest on
-  `verify()` / `resolve()` before any resume.
+- **`value_quality`** — gated to 0 if the recommended item violates a hard
+  constraint (over budget / missing must-have); else graded by price-rank among
+  the valid set (cheapest valid = 1.0). This is the cost-saving objective.
+- **`accepted`** — from the programmatic `judge_accept`, an objective fit check,
+  never persuasion.
+- **Permission gate (`−1.0`, hard floor).** An add is legitimate only after an
+  explicit accept; acting without one is a floor, *not* traded against value. It
+  is structural, not a soft cost: acting without permission never produces a
+  legit cart, so the violating trajectory has no value/accepted term to offset
+  the −1.0 (measured: good +1.14 vs add-without-permission −1.00).
+- **`per_turn_info_gain`** — a clarifying question is credited on the turn it was
+  asked, by how much it shrinks the set of catalog items still consistent with
+  what the agent knows (bits of uncertainty removed). This is the dense signal
+  that counters the "RL kills clarification" collapse.
 
-## 5. Policy lifecycle & on-policy correctness
+**Credit assignment (no parallel reward).** The four *outcome* terms form the
+trajectory scalar that `assign_credit` spreads across turns (uniform, or
+γ-discounted if learning stalls); info-gain is passed to the *same*
+`assign_credit` as a `per_turn_bonus`, added on the turn it occurred. One credit
+path, reused — not a divergent second reward.
 
-```
-train step → PolicyRegistry.publish(adapter)  → v{n}  (atomic, fingerprinted)
-           → RunRecord.policy_version = n
-           → trajectories tagged lineage.policy_id = "v{n}"
-           → staleness = current_version − trajectory_version   (staleness_gate)
-```
+## 4. User-simulator seams (swappable generation, fixed judgment)
 
-- Single-process training is **on-policy** — rollout and optimize share the live
-  weights, so the generating policy is the current one; the staleness gate
-  confirms this (measured `staleness=0` on the real run).
-- `publish` is **fail-closed** on a version collision (`atomic_ingest` raises
-  `FileExistsError` rather than clobbering `v{n}`), and `gpu_slots=1` enforces a
-  single publisher in practice.
-- The `staleness_gate` (warn/reject) exists to catch decoupled/lagging rollout;
-  `PolicyClient.refresh/pin` demonstrate the mechanism (and a simulated lagging
-  worker).
+Two objects, strictly separated (`env/simulator.py`):
 
-## 6. Registries & lineage (referential integrity)
+| Seam | Object | Now | Later | Rule |
+|---|---|---|---|---|
+| Generation | `ConversationModel` | `ScriptedConversation` | `FrozenLLMConversation` | only phrases the user turn |
+| Judgment | `judge_accept` | rule-based | **unchanged** | the ONLY accept/reject authority |
 
-| Registry | Key | Crash-safe write | Lineage edge |
-|---|---|---|---|
-| Experiment (`registry.db`) | `run_id` | SQLite txn | ← trajectory.job_id, → best_checkpoint, policy_version |
-| Checkpoint | `ckpt_id` | atomic_ingest | ← run, ← prompt_dataset (artifact) |
-| Policy | `v{n}` | atomic_ingest | ← checkpoint (artifact) |
-| Prompt | `dataset_version` | atomic rename + hash | → run.dataset_version |
-| Trajectory (`trajectories.db`) | `id` | SQLite txn | policy_id="v{n}", job_id=run_id, parent_id |
-| Artifact (`artifacts.db`) | `artifact_id` | SQLite txn | parent-edge DAG across all types |
+The env calls both through the interface, never a concrete model directly. The
+reward reads the *decision* (`judge_accept`), never the *words* — so a
+conversation model cannot be persuaded into accepting a bad item (reward
+hacking), and the accept signal stays verifiable. `FrozenLLMConversation` takes
+an injected `generate(prompt)->str` so it is CPU-testable with a stub today and
+swaps to a real frozen instruct LLM in Phase 2 without touching env/reward/judge.
 
-The artifact registry ties them into one DAG: `prompt_dataset → checkpoint →
-policy`, `checkpoint → eval_report`. A run's `eval_result`, `best_checkpoint`, and
-`policy_version` make every number traceable to the exact config, code
-(`git_commit`), dataset (`dataset_version`), and reward (`reward_version`).
+## 5. RLOO from GRPO (Phase 2, designed)
 
----
+Method: RLVR-dominant verifiable reward + one model-based acceptance signal,
+optimized with **RLOO** (REINFORCE leave-one-out) — critic-free, chosen for
+stability. RLOO reuses the group-of-samples machinery of GRPO and changes only
+the baseline:
 
-## 7. Architecture Decision Records
+- **GRPO:** advantage for sample *i* = (r_i − mean of ALL samples) / group std.
+- **RLOO:** advantage for sample *i* = r_i − mean of the *other* samples
+  (leave-one-out), no std rescaling — a provably-unbiased, cleaner critic-free
+  estimator at identical cost.
 
-**ADR-1 — SQLite as the queue + state store.**
-*Problem:* need a durable job queue + state machine on one machine.
-*Decision:* one SQLite file (WAL) as both queue and persistence; atomic optimistic
-transitions.
-*Alternatives:* Redis/RabbitMQ (broker), Postgres, in-memory.
-*Trade-offs:* SQLite gives ACID + zero-ops + single-file durability, at the cost of
-single-writer throughput and no network access. Right-sized for one machine.
-*Scale-out:* swap the `JobStore` interface for a real broker + Postgres; the
-transition-graph + claim semantics port directly.
+The rest of the loop (clipped surrogate + KL-to-reference) is held fixed so the
+only measured difference from a GRPO baseline is the baseline choice. Rollouts
+reset the simulator to an *identical hidden state*, then sample k=8 full
+conversations per group; the trajectory advantage is applied to all tokens to
+start, with γ≈0.7 turn-discounting added only if learning stalls. KL drift from
+the SFT reference is the core stability lever (final + max KL logged per step).
 
-**ADR-2 — Lease + heartbeat + reaper for worker-death recovery.**
-*Problem:* a worker can die mid-job, stranding it `RUNNING`.
-*Decision:* claim sets a lease; a heartbeat renews it; a reaper requeues expired
-leases.
-*Alternatives:* no recovery (manual), a supervisor process, OS-level job control.
-*Trade-offs:* lease length trades detection speed vs heartbeat overhead; chose a
-generous lease (120s) + heartbeat since training jobs are long and singular.
-*Scale-out:* the same lease/reaper model is how distributed queues (SQS visibility
-timeout, K8s leases) work — documented, not built.
+## 6. Evaluation
 
-**ADR-3 — Single authoritative checkpoint writer.**
-*Problem:* a non-atomic `save_pretrained` + a post-hoc registry copy defeated the
-integrity guarantee.
-*Decision:* the trainer writes to a temp dir; the CheckpointRegistry atomically
-ingests it; no other persistent writer.
-*Alternatives:* trainer writes final + registry indexes (dual write); registry
-wraps the trainer's save.
-*Trade-offs:* one extra copy of a small LoRA adapter, for a real
-atomic+checksummed guarantee.
-*Scale-out:* the registry root becomes object storage (S3) with the same
-manifest+checksum contract.
+`eval/harness.py` runs any policy over a **held-out** scenario split (disjoint
+seed from training — a generalization measure, not recall) and reports ask-rate,
+permission-violation rate, mean `value_quality`, accept-rate, and mean
+turns-to-recommendation. Three scripted reference policies bound a trained run
+through the same `Policy` interface: `OracleGood` (ceiling), `NoAskBaseline`
+(value floor: never asks → value ~0.55 vs 1.0), `Violation` (safety floor:
+violation-rate 1.0, value 0).
 
-**ADR-4 — Own RLTrainer, not TRL.**
-*Problem:* need GRPO/RLOO/PPO with full control + a teaching goal.
-*Decision:* implement the algorithms behind one `RLTrainer` interface.
-*Alternatives:* TRL/OpenRLHF/verl.
-*Trade-offs:* more code to own, but full correctness control and no heavy
-dependency; the `RLTrainer` interface is the integration seam if a framework
-backend is ever wanted.
-*Scale-out:* add a `TRLTrainer(RLTrainer)` adapter behind the same interface.
+## 7. Real vs simulated (authoritative)
 
-**ADR-5 — Reward is a verifiable rule function, not a model.**
-*Problem:* need a fast, reproducible, ungameable reward on one machine.
-*Decision:* score responses against a synthetic catalog (ground truth).
-*Trade-offs:* less "realistic" than a learned RM, but fully verifiable and cheap
-(reward = ~0% of loop time, measured).
-*Scale-out:* swap in a reward-worker pool when reward becomes expensive (documented).
+- **Real (built + tested, CPU):** the whole environment plane — catalog +
+  hidden-need scenarios, `PennyEnv`, verifiable reward + info-gain, the two
+  simulator seams, SFT demo generator, eval harness + reference policies. 24
+  tests.
+- **Designed, not yet run:** the training plane (SFT-train + multi-turn RLOO on
+  V100) and the infrastructure plane (A10G vLLM rollout, S3 bridge, dashboard).
+- **Cited, not this project's result:** ShopRL's RLOO-vs-PPO KL numbers (choice
+  rationale only).
 
----
+## 8. V100 VRAM note — **to be re-profiled in Phase 2**
 
-## 8. SLOs (single-machine, honest)
-
-These are **targets for the platform's own correctness**, not model quality:
-- **Job durability:** 100% — no acknowledged job is lost across process restart
-  (SQLite WAL; verified by restart tests).
-- **Worker-death recovery:** a job orphaned by a dead worker is requeued within
-  ≤ `TRAIN_LEASE` (120s) of the next `serve_pending` pass.
-- **Checkpoint integrity:** 100% of resolvable checkpoints pass sha256
-  verification; a corrupt/truncated checkpoint is never silently resumed.
-- **State-transition safety:** no observable intermediate/orphan state after a
-  crash mid-recovery (atomic `fail()`).
-- **No fabricated metrics:** every reported metric is measured or reported absent.
-Not an SLO: model reward improvement (task is near-saturated) or GPU throughput
-(hardware-gated, unmeasured).
-
-## 9. Operational runbook
-
-- **Start the API:** `SHOPRL_ROOT=runs/pipeline uvicorn shoprl.platform.api:app`
-- **Start a worker:** `python -m shoprl.platform.control --root runs/<name>/platform [--drain]`
-- **Submit a run:** `POST /training-jobs {config_path, n_prompts, num_samples}`
-  (or `python -m shoprl.rl.run --config <cfg> --out results/<x>.json`).
-- **Observe:** `streamlit run src/shoprl/platform/ops_console.py` (embedded or HTTP).
-- **Recover a stuck job:** none needed — the reaper requeues on the next worker
-  pass. Inspect via `GET /jobs` / `GET /jobs/{id}`.
-- **Verify a checkpoint:** `CheckpointRegistry(root).verify(ckpt_id)`.
-- **Cost/GPU:** every cloud run is terminated + verified (0 instances/volumes).
-
-## 10. Security & data-governance notes
-
-- **No auth / multi-tenancy** (out of scope): the API is a single-operator
-  localhost control plane; do **not** expose it to a network without adding auth.
-- **Secrets:** HF / cloud tokens are passed via env / SSM Parameter Store on the
-  GPU box, never committed. (Any token pasted into a chat is compromised and must
-  be rotated.)
-- **Data:** the catalog + prompts are synthetic and deterministic (`seed`), so
-  there is no PII and datasets are reproducible + hash-versioned. Trajectories
-  store model text only; no user data.
-- **Provenance:** every run records `git_commit`, `config_hash`, `dataset_version`,
-  `reward_version` for reproducibility/audit.
-
-## 11. Real vs simulated (authoritative)
-
-- **Real:** RLTrainer (GRPO/RLOO/PPO), rule reward, SQLite persistence + atomic
-  transitions, local-process workers, lease/heartbeat/reaper recovery, atomic
-  checkpoint + sha256 verify, policy versioning + staleness, all registries,
-  end-to-end control-plane routing.
-- **Simulated (labelled):** OOM trigger (`SimulatedOOM`), worker death (lease
-  expiry), lagging worker (`PolicyClient.pin`), trajectory replay (duplicate).
-- **Stub (labelled):** `StubRolloutEngine` for the dependency-free pipeline demo.
-- **Unmeasured (honest):** the vLLM-vs-HF benchmark — hardware-gated; tooling is
-  ready and degrades to `{available:False}` on CPU. GPU memory/utilization for the
-  HF rollout engine on V100 *is* now measured — see §12.
-
-## 12. V100 3B Empirical Scaling & Throughput Profiling
-
-Measured on a single Tesla V100-SXM2-32GB (Volta, `dtype: float16` — no bf16
-tensor cores on this arch), `Qwen/Qwen2.5-3B`, LoRA (r=8), HF rollout engine.
-Config: `configs/qwen25_3b_v100.yaml`. Numbers are read from the trainer's
-per-step `gpu_telemetry()` (`torch.cuda.memory_allocated` /
-`reset_peak_memory_stats` + `max_memory_allocated`), not estimated.
-
-| Metric | Batch 8 (`num_samples=8`, 5 steps) | Batch 16 (`num_samples=16`, 20 steps) |
-|---|---|---|
-| Peak VRAM | 13.5–13.6 GB | 20.5–21.4 GB |
-| Headroom (of 32GB) | ~57% free | ~33–36% free |
-| Steady-state allocated | ~8.1–8.2 GB | ~9.7–9.9 GB |
-
-- Doubling the rollout group size roughly **1.5x'd peak VRAM**, not 2x — activation
-  memory scales with batch but weights/optimizer state are fixed, so the marginal
-  cost per sample shrinks. No OOM at either batch size; the card has ~10GB of
-  further headroom before the next doubling (batch 24–32) would need to be tried.
-- Peak VRAM stayed in a tight, stable band across all 20 steps at batch 16
-  (20.5–21.4 GB) — no memory creep/leak over the longer run.
-
-**Learning health (20-step batch-16 run):**
-- **Reward:** noisy, in [0.28, 0.60], no collapse or divergence.
-- **KL:** monotonic climb from 0.0000 → 0.0112 — the policy is moving away from
-  the reference at a bounded, non-exploding rate, consistent with early
-  on-policy GRPO training (see §5).
-- **Entropy:** declined 0.706 → 0.605 — the policy is sharpening (narrowing its
-  output distribution) as training progresses, the expected direction.
-- **grad_norm:** bounded in [0.29, 0.92] throughout — no instability.
-
-**Scale-out:** these are single-GPU, single-model numbers; they set the floor for
-per-worker VRAM budgeting if/when this scales to multiple V100 workers (§1
-Scheduler `gpu_slots`).
+> ⚠️ The scaling numbers previously recorded here were for **Qwen2.5-3B,
+> single-turn, LoRA** on a V100. **That profile does NOT hold for Pennywise**,
+> which is **Qwen-1.5B instruct, full fine-tune, multi-turn**. Two things change
+> the memory math materially and must be measured before the first real run:
+> 1. **Full fine-tune ≠ LoRA** — all parameters carry gradients + AdamW moment
+>    state (not a tiny adapter), a different (and larger) optimizer-state
+>    footprint.
+> 2. **Multi-turn sequences are far longer than single-turn** — and Volta has
+>    **no FlashAttention**, so attention memory is quadratic in sequence length.
+>    The max viable sequence length must be measured first; it may cap
+>    `max_turns` or force LoRA even on a 32GB card.
+>
+> No VRAM/throughput number is claimed for Pennywise until it is measured on the
+> V100 (see `PHASE2_NOTES.md`).
