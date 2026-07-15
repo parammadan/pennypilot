@@ -181,3 +181,49 @@ Short **50-step observed** iterations (not a blind batch). Adapt the multi-turn
 rollout vs the simulator, RLOO leave-one-out advantage, KL-to-SFT-reference;
 micro-batch the group of 8. Confirm reward moves and KL stays controlled before
 scaling.
+
+## Phase 2c — RLOO loop bring-up
+
+Multi-turn RLOO (`src/shoprl/train/rloo.py`, `scripts/run_rloo.py`): k rollouts
+per prompt vs the simulator, leave-one-out advantage (A_i = r_i − mean(r_−i), no
+std norm), micro-batched to batch=1 for the policy-gradient backward (full-FT
+can't forward k long sequences at once), REINFORCE loss −A·logp̄ + β·k3-KL vs the
+frozen SFT reference. Policy + reference both init from the grounded SFT
+checkpoint.
+
+**10-step smoke:** ran end-to-end (reward computes, KL logs, no crash), KL
+~0.0013, ask 1.0 / violation 0.0 preserved. Surfaced a gradient-scale bug —
+`grad_norm` up to ~668 because the PG summed logp over ~40 agent tokens, so
+clipping (max_grad_norm 1.0) masked the real update. Fixed: normalize PG + KL
+**per token** (mean). grad_norm dropped to O(0.1–5).
+
+**50-step observed run** (k=8, β=0.04, lr 1e-6, bf16):
+
+| step | reward | KL | value | ask | viol | grad_norm |
+|---|---|---|---|---|---|---|
+| 0  | +0.885 | 0.00000 | 0.75 | 1.0 | 0.0 | 2.70 |
+| 10 | +1.104 | 0.00135 | 0.88 | 1.0 | 0.0 | 4.56 |
+| 20 | +1.100 | 0.00098 | 0.88 | 1.0 | 0.0 | 2.05 |
+| 30 | +1.097 | 0.00201 | 0.88 | 1.0 | 0.0 | 2.59 |
+| 40 | +1.028 | 0.00343 | 0.88 | 1.0 | 0.0 | 3.41 |
+| 49 | +1.153 | 0.00348 | 1.00 | 1.0 | 0.0 | 0.28 |
+
+- **KL controlled** — a slow bounded climb 0 → ~0.0035 (the RLOO-stable regime;
+  no PPO-style blowup). This is the core stability result.
+- **No regression / no collapse** — ask 1.0 and violation 0.0 through all 50
+  steps; post-RLOO held-out eval (30 scenarios) = value 1.0 / accept 1.0 /
+  cheapest-hit 1.0 / ask 1.0 / violation 0.0, identical to SFT.
+- **Near-saturation shows up as sparse signal** — most steps have adv≈0 (the 8
+  rollouts are identical on easy scenarios → zero leave-one-out advantage), so
+  the pipeline is demonstrated to be stable rather than shown climbing a big
+  reward gap. Harder/curriculum scenarios would widen that gap.
+
+**Bottleneck (motivates Phase 3):** each step is dominated by rollout generation
+on *emulated* bf16 (~30 s/step for k=8). Phase 3's vLLM data-parallel rollout on
+the 2× A10Gs is exactly the fix.
+
+### Phase 2 status: COMPLETE
+Pipeline validated end-to-end on the V100 — SFT warmup → grounded env → RLOO
+(rollout → verifiable reward → leave-one-out advantage → KL-controlled update →
+checkpoint), stable and observable. Next: Phase 3 (efficiency + observability;
+A10G rollout throughput, dashboard, S3 checkpoint bridge, checkpoint/resume).
