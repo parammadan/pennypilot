@@ -79,15 +79,59 @@ step (ref fwd + policy fwd → loss → backward → optimizer.step), 30 GB cap:
 exceed the cap) → the RLOO loop must micro-batch / gradient-accumulate over the
 group of 8 (next round).
 
-## Step 4 — bounded SFT warmup
+## Step 4 — bounded SFT warmup (close-out)
 
-`scripts/run_sft.py` (loss masked to agent turns; masking verified: supervised
-tokens = exactly the agent action turns). First run: full-FT, 1000 demos, batch
-4, 1 epoch, lr 1e-5, `max_len 512`, `max_turns 12`.
+Config: full-FT, 1000 demos, batch 4, 1 epoch (250 steps), **lr 1e-5, grad-clip
+1.0, no warmup**, `max_len 512`, `max_turns 12`.
 
-> **Result: _pending_** — SFT run in progress (job pw-sft). To record:
-> pre-SFT vs post-SFT **well-formed-action rate** on held-out scenarios
-> (the Step-4 success signal), and any grammar samples.
+**1. Precision — fp16 diverges, bf16 is stable (measured).**
+Pure **fp16** full-FT went **NaN at step 1** (gradient overflow, no loss
+scaling) and collapsed to `!!!!!` garbage — despite a clean exit code (judge on
+numbers, not exit status). **bf16** (emulated on Volta) held finite. fp32-master
+would be stable but needs ~30 GB fixed → doesn't fit. So **bf16 is the full-FT
+precision on this hardware.**
+
+**2. Loss trajectory (bf16) — finite + decreasing:**
+`3.31 (s1) → 0.48 (s10) → 0.17 (s20) → 0.14 (s50) → ~0.09–0.13 (s120–250)`; NaN
+early-stop never fired.
+
+**3. Grammar (well-formed action rate), held-out:** pre-SFT **0.0 (0/240)** →
+post-SFT **0.947 (358/378)**. Cold-start taught the grammar.
+
+**4. Masking — verified correct:** supervised tokens per batch = 168–206 (agent
+turns only); decoded supervised span = exactly the agent actions
+(`ASK[...]/RECOMMEND[...]/ASK_PERMISSION/ADD_TO_CART[...]`), no user/prompt tokens.
+
+**5. Behaviour (30 held-out, `show_rollout.py`) — ritual YES, value NO:**
+`ask_rate 1.000 · violation_rate 0.000 · accept_rate 0.400 · mean value_quality
+0.339 · cheapest-valid hit 0.267`. It always asks and never violates permission
+(the behaviours RL must preserve), and sometimes nails the cheapest valid item
+(value 1.0) — but ~60% of recommendations are invalid.
+
+**6. Duration / bf16:** both SFT runs `sacct` Elapsed **00:10:07**. This does NOT
+cleanly show the expected bf16-emulation slowdown because the comparison is
+**confounded** — the fp16 run generated with the KV cache OFF (slow), the bf16
+run with it ON (fast) — so the training-speed delta is masked. bf16 on Volta
+(cap 7.0) has no tensor cores and runs emulated, so it *is* slower per-op; a
+clean fp16-vs-bf16 fwd/bwd micro-benchmark is still TODO. bf16 did NOT OOM,
+confirming it ran at 2-byte width (not a silent fp32 fallback, which wouldn't
+fit).
+
+### KEY FINDING — catalog grounding is a prerequisite for RLOO
+`value_quality` is weak (0.339, *below* the random-valid baseline 0.547) because
+**the agent never sees the catalog** — `PennyEnv` exposes only the conversation,
+so the model cannot identify which SKU is valid (right brand, under budget), let
+alone the cheapest. It learned to emit plausible SKU tokens, not grounded
+selection. **RL cannot fix this**: with no catalog in context there is no
+learnable path from action to "cheapest valid", so an RLOO value reward would
+only invite reward-hacking on memorized SKUs.
+
+**Prerequisite before RLOO:** add candidate grounding to the env — after the
+agent discovers the constraints, present the matching catalog items (SKU +
+price), or add a `SEARCH`/`FILTER` action that returns them (cf. shoprl's
+retrieve→shortlist, and Phase-4's Chromium browsing). Then "recommend cheapest
+valid" is groundable and RLOO can sharpen it. The ritual (ask/permission) is
+already present and must be preserved through RL.
 
 ## Bugs caught (before they cost GPU time)
 
