@@ -11,7 +11,9 @@
 # 20-step tiny run's loss is finite and falling and the mask verified. Any
 # failure stops the job right there with the evidence in the log.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+# sbatch copies this script to its spool dir, so $0 is useless for locating
+# the repo — go there explicitly.
+cd "$HOME/pennywise-v100-infra"
 source env.sh
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 BASE=/scratch/madan.pa/pennypilot
