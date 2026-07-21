@@ -36,7 +36,8 @@ _BUDGET_WORDS = ("budget", "price", "spend", "afford", "cost", "$", "how much",
                  "presupuesto", "cuánto", "cuanto", "gastar", "precio")
 _FEATURE_WORDS = ("ram", "gb", "memory", "memoria", "battery", "batería",
                   "bateria", "hour", "hora", "weight", "peso", "lb", "libra",
-                  "brand", "marca", "spec", "feature", "requisito", "importante")
+                  "brand", "marca", "spec", "feature", "requirement", "must",
+                  "need", "requisito", "importante")
 
 
 @dataclass
