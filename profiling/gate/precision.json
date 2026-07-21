@@ -1,0 +1,30 @@
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "method": "lora",
+  "arms": [
+    {
+      "arm": "bf16",
+      "steps": 30,
+      "nonfinite_losses": 0,
+      "loss_first": 3.0068,
+      "loss_last": 1.8522,
+      "tokens_per_sec": 809.8,
+      "wall_seconds": 72.4,
+      "peak_mem_gb": 7.34,
+      "scaler_scale_final": null
+    },
+    {
+      "arm": "fp16",
+      "steps": 30,
+      "nonfinite_losses": 0,
+      "loss_first": 3.0099,
+      "loss_last": 1.5483,
+      "tokens_per_sec": 3455.0,
+      "wall_seconds": 17.0,
+      "peak_mem_gb": 7.34,
+      "scaler_scale_final": 65536.0
+    }
+  ],
+  "verdict": "fp16 (both stable; 4.27x faster: 3455.0 vs 809.8 tok/s)",
+  "note": "pin this precision for policy AND reference logprob paths (no phantom KL); record in docs repo"
+}
