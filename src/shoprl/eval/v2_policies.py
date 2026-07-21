@@ -35,10 +35,15 @@ class OracleGoodV2(_ScriptedV2):
     def reset(self, scenario: Scenario, idx: dict[str, Product]) -> None:
         target = min(scenario.valid_skus, key=lambda s: idx[s].price)
         price = idx[target].price
+        # One clarifying ask per hidden must-have (hard scenarios carry extras),
+        # so the oracle keeps demonstrating full discovery before recommending.
+        feature_asks = [
+            _j(action="ask_user",
+               question="Any must-have feature — RAM, battery, weight, brand?")
+            for _ in scenario.all_must_haves]
         self.plan = [
             _j(action="ask_user", question="What is your total budget?"),
-            _j(action="ask_user",
-               question="Any must-have feature — RAM, battery, weight, brand?"),
+            *feature_asks,
             _j(action="search", query="matching laptops, cheapest first"),
             _j(action="select_product", product_id=target,
                reason="cheapest option meeting your budget and must-have"),

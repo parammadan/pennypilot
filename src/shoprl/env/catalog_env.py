@@ -22,8 +22,9 @@ from shoprl.actions import (AbstractAction, AddToCart, AskUser, InspectProduct,
                             ParseResult, RequestCartPermission, Search,
                             SelectProduct, parse_agent_action)
 from shoprl.data.catalog import Product
+from shoprl.data.prompts import satisfies
 from shoprl.env.base import StepResult
-from shoprl.env.pennyenv import format_candidates, search_catalog
+from shoprl.env.pennyenv import format_candidates
 from shoprl.env.reward import PennyBreakdown, pennywise_reward
 from shoprl.env.scenario import Scenario
 from shoprl.env.simulator import (ConversationModel,
@@ -114,8 +115,7 @@ class SyntheticCatalogEnvironment:
         if isinstance(action, AskUser):
             return self._ask(aj, action.question)
         if isinstance(action, Search):
-            cands = search_catalog(self.catalog, self.scenario,
-                                   self._known_fields())
+            cands = self._filter_products(k=10)
             s.record_candidates([p.sku for p in cands])
             return self._record(aj, format_candidates(cands), 0.0,
                                 f"search -> {len(cands)} candidates "
@@ -151,25 +151,36 @@ class SyntheticCatalogEnvironment:
     # -- action handlers -------------------------------------------------------
     def _ask(self, aj: str, question: str) -> StepResult:
         fld = self._classify_question(question)
-        if fld in ("budget", "feature") and fld not in self._discovered:
+        if fld == "budget" and "budget" not in self._discovered:
             before = self._consistent_count()
-            user = self._user(fld)
+            user = self._user("budget")
             self.state.observe_user_message(user)   # language layer on real words
-            self._discovered.add(fld)
+            self._discovered.add("budget")
             # Ground-truth overwrite: the env knows exactly what was revealed
-            # (extraction from phrasing may miss brand/weight forms).
-            if fld == "budget":
-                self.state.budget_total = self.scenario.hidden_budget
-                self.state.currency = self.state.currency or "USD"
-            else:
-                self.state.hard_constraints[self.scenario.must_have_key] = (
-                    self.scenario.must_have_value
-                    if isinstance(self.scenario.must_have_value, float)
-                    else self.scenario.must_have_value)
-                if self.scenario.must_have_key not in self.state.known_constraint_keys:
-                    self.state.known_constraint_keys.append(self.scenario.must_have_key)
-            gain = self._gain(before, self._consistent_count())
-            return self._record(aj, user, gain, f"revealed {fld}")
+            # (extraction from phrasing may miss some surface forms).
+            self.state.budget_total = self.scenario.hidden_budget
+            self.state.currency = self.state.currency or "USD"
+            return self._record(aj, user, self._gain(before, self._consistent_count()),
+                                "revealed budget")
+        if fld == "feature":
+            # Reveal the NEXT undiscovered must-have (primary first, then the
+            # hard-scenario extras) — one reveal per clarifying question, so a
+            # multi-constraint need takes multiple asks to pin down.
+            key = next((k for k in self.scenario.all_must_haves
+                        if k not in self._discovered), None)
+            if key is not None:
+                value = self.scenario.all_must_haves[key]
+                before = self._consistent_count()
+                utter_c = getattr(self.conversation, "utter_constraint", None)
+                user = utter_c(key, value) if utter_c else self._user("feature")
+                self.state.observe_user_message(user)
+                self._discovered.add(key)
+                self.state.hard_constraints[key] = value
+                if key not in self.state.known_constraint_keys:
+                    self.state.known_constraint_keys.append(key)
+                return self._record(
+                    aj, user, self._gain(before, self._consistent_count()),
+                    f"revealed {key}")
         return self._record(aj, self._user("other"), 0.0,
                             "redundant/irrelevant ask (no new info)")
 
@@ -226,8 +237,29 @@ class SyntheticCatalogEnvironment:
         return self._record(aj, self._user("other"), 0.0, note, done=True)
 
     # -- internals ---------------------------------------------------------------
-    def _known_fields(self) -> set[str]:
-        return set(self._discovered)
+    def _filter_products(self, k: int | None = None) -> list[Product]:
+        """Catalog items consistent with what has been DISCOVERED so far
+        (budget + any revealed must-haves), cheapest first. Before discovery
+        this is the whole catalog — searching early shows globally-cheapest
+        items that usually violate a still-hidden constraint, which is exactly
+        the distractor structure that makes asking pay."""
+        s = self.scenario
+        out = []
+        for p in self.catalog:
+            if "budget" in self._discovered and p.price > s.hidden_budget:
+                continue
+            ok = True
+            for key in self._discovered:
+                if key == "budget":
+                    continue
+                v = s.all_must_haves[key]
+                ok = (p.brand == v) if key == "brand" else satisfies(p, {key: float(v)})
+                if not ok:
+                    break
+            if ok:
+                out.append(p)
+        out.sort(key=lambda p: p.price)
+        return out[:k] if k is not None else out
 
     def _classify_question(self, q: str) -> str:
         low = (q or "").lower()
@@ -238,8 +270,7 @@ class SyntheticCatalogEnvironment:
         return "other"
 
     def _consistent_count(self) -> int:
-        return len(search_catalog(self.catalog, self.scenario,
-                                  self._known_fields(), k=len(self.catalog)))
+        return len(self._filter_products())
 
     def _gain(self, before: int, after: int) -> float:
         if after <= 0 or after >= before:

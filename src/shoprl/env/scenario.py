@@ -56,12 +56,25 @@ class Scenario(BaseModel):
     must_have_key: str
     must_have_value: float | str
     valid_skus: list[str]
+    # v2 hard mode: ADDITIONAL hidden must-haves beyond the primary one (empty
+    # for v1 scenarios — fully backward compatible). Each is revealed by its
+    # own clarifying question, so more constraints = more asks required, and
+    # the cheapest item after PARTIAL discovery is often invalid (a natural
+    # distractor: "cheapest valid ≠ list position #1" until you've asked enough).
+    extra_must_haves: dict[str, float | str] = {}
 
     @property
     def hidden_constraints(self) -> dict[str, float | str]:
-        """The full hard-constraint set = budget + must-have. `satisfies()` (for
-        numeric keys) and an explicit brand check together define 'valid'."""
-        return {"max_price": self.hidden_budget, self.must_have_key: self.must_have_value}
+        """The full hard-constraint set = budget + must-have(s). `satisfies()`
+        (numeric keys) and an explicit brand check together define 'valid'."""
+        return {"max_price": self.hidden_budget,
+                self.must_have_key: self.must_have_value,
+                **self.extra_must_haves}
+
+    @property
+    def all_must_haves(self) -> dict[str, float | str]:
+        """Primary + extras, in reveal order (primary first)."""
+        return {self.must_have_key: self.must_have_value, **self.extra_must_haves}
 
 
 def _brands(catalog: list[Product]) -> list[str]:
@@ -159,3 +172,88 @@ def generate_scenarios(
             )
         )
     return scenarios
+
+
+# ---------------------------------------------------------------------------
+# v2 hard scenarios — multi-constraint hidden needs for the Scenario Hardness
+# Gate (base-model success must land in 10–40% before any SFT/RL spend).
+# ---------------------------------------------------------------------------
+
+def _meets(p: Product, key: str, value: float | str) -> bool:
+    if key == "brand":
+        return p.brand == value
+    return satisfies(p, {key: float(value)})
+
+
+def hard_valid_skus(catalog: list[Product], budget: float,
+                    constraints: dict[str, float | str]) -> list[str]:
+    """SKUs meeting the budget AND every must-have — the verifiable answer set."""
+    return [p.sku for p in catalog
+            if p.price <= budget and all(_meets(p, k, v)
+                                         for k, v in constraints.items())]
+
+
+def generate_hard_scenarios(
+    catalog: list[Product],
+    n: int = 200,
+    seed: int = 0,
+    category: str = "laptop",
+    n_must_haves: tuple[int, int] = (2, 3),
+    valid_target_range: tuple[int, int] = (5, 20),
+    max_tries: int = 200,
+) -> list[Scenario]:
+    """Hidden needs with MULTIPLE simultaneous must-haves.
+
+    Same budget-pinning trick as `generate_scenarios` (budget = k-th cheapest
+    fully-qualifying price, so the budget stays binding), but the qualifying
+    pool is filtered by ALL sampled must-haves. Discovery therefore takes one
+    ask per constraint, and until the last constraint is revealed the
+    cheapest-shown item frequently violates a still-hidden one — the distractor
+    structure that keeps 'pick list #1' from being a free win.
+    """
+    rng = random.Random(f"hard-scenario-{seed}")
+    out: list[Scenario] = []
+    for i in range(1, n + 1):
+        for _ in range(max_tries):
+            k_constraints = rng.randint(*n_must_haves)
+            keys = rng.sample(_MUST_HAVE_KEYS, k=k_constraints)
+            constraints: dict[str, float | str] = {
+                key: _sample_value(rng, catalog, key) for key in keys}
+            pool = sorted(p.price for p in catalog
+                          if all(_meets(p, k, v) for k, v in constraints.items()))
+            if len(pool) < 2:
+                continue
+            target = rng.randint(*valid_target_range)
+            k = min(target, len(pool) - 1)
+            budget = round(pool[k - 1] + 0.01, 2)
+            valid = hard_valid_skus(catalog, budget, constraints)
+            if valid:
+                break
+        else:
+            continue
+        primary_key = keys[0]
+        extras = {k: v for k, v in constraints.items() if k != primary_key}
+        out.append(Scenario(
+            scenario_id=f"H-{i:04d}",
+            category=category,
+            opening_utterance=rng.choice(_OPENINGS),
+            hidden_budget=budget,
+            must_have_key=primary_key,
+            must_have_value=constraints[primary_key],
+            valid_skus=valid,
+            extra_must_haves=extras,
+        ))
+    return out
+
+
+def _sample_value(rng: random.Random, catalog: list[Product],
+                  key: str) -> float | str:
+    """Sample a value for a SPECIFIC constraint key (mirrors _sample_must_have's
+    per-key value pools)."""
+    if key == "min_ram":
+        return float(rng.choice([16, 32, 64]))
+    if key == "max_weight":
+        return float(rng.choice([3.0, 3.5, 4.0]))
+    if key == "min_battery":
+        return float(rng.choice([10, 12, 15]))
+    return rng.choice(_brands(catalog))

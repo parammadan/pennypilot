@@ -25,17 +25,22 @@ from shoprl.env.scenario import Scenario
 
 def judge_accept(scenario: Scenario, sku: str | None,
                  idx: dict[str, Product]) -> bool:
-    """Programmatic accept: True iff the item meets the hidden budget AND the
-    hidden must-have. Objective fit only — the reward's `accepted` term and the
-    permission gate both read this, nothing else."""
+    """Programmatic accept: True iff the item meets the hidden budget AND every
+    hidden must-have (v2 hard scenarios carry extras; v1 scenarios have just the
+    primary, so behaviour is unchanged). Objective fit only — the reward's
+    `accepted` term and the permission gate both read this, nothing else."""
     if not sku:
         return False
     p = idx.get(sku)
     if p is None or p.price > scenario.hidden_budget:
         return False
-    if scenario.must_have_key == "brand":
-        return p.brand == scenario.must_have_value
-    return satisfies(p, {scenario.must_have_key: float(scenario.must_have_value)})
+    for key, value in scenario.all_must_haves.items():
+        if key == "brand":
+            if p.brand != value:
+                return False
+        elif not satisfies(p, {key: float(value)}):
+            return False
+    return True
 
 
 class ConversationModel(Protocol):
@@ -65,6 +70,10 @@ class ScriptedConversation:
             return scenario.opening_utterance
         # Irrelevant / unparseable agent turn: reveal nothing.
         return "Could you help me find the right one?"
+
+    def utter_constraint(self, key: str, value: float | str) -> str:
+        """Phrase ONE specific constraint reveal (v2 multi-constraint asks)."""
+        return phrase_constraint(key, value)
 
 
 class FrozenLLMConversation:
@@ -108,6 +117,37 @@ class FrozenLLMConversation:
         else:
             fact = "Reply vaguely; reveal no specific requirement."
         return f"{self._system}\nInstruction: {fact}\nUser:"
+
+
+def phrase_constraint(key: str, value: float | str) -> str:
+    """English phrasing for ONE constraint reveal — used for v2 hard scenarios
+    where each extra must-have is revealed by its own clarifying question."""
+    if key == "min_ram":
+        return f"It needs at least {int(value)}GB of RAM."
+    if key == "max_weight":
+        return f"It can't weigh more than {value} lbs."
+    if key == "min_battery":
+        return f"I need at least {int(value)} hours of battery."
+    if key == "brand":
+        return f"It has to be a {value}."
+    return "That's important to me."
+
+
+def phrase_constraint_es(key: str, value: float | str, spanglish: bool) -> str:
+    """Spanish / Spanglish phrasing for ONE constraint reveal."""
+    if key == "min_ram":
+        return (f"Necesita al menos {int(value)}GB de RAM." if not spanglish
+                else f"It needs al menos {int(value)}GB de RAM.")
+    if key == "max_weight":
+        return (f"No puede pesar más de {value} libras." if not spanglish
+                else f"No puede pesar more than {value} lbs.")
+    if key == "min_battery":
+        return (f"Necesito al menos {int(value)} horas de batería." if not spanglish
+                else f"I need al menos {int(value)} horas de batería.")
+    if key == "brand":
+        return (f"Tiene que ser una {value}." if not spanglish
+                else f"It has to be una {value}.")
+    return "Eso es importante para mí."
 
 
 def _phrase_must_have(scenario: Scenario) -> str:
@@ -157,6 +197,12 @@ class MultilingualScriptedConversation(ScriptedConversation):
                     else "Necesito una laptop nueva, can you help?")
         return ("¿Me ayudas a encontrar el indicado?" if es
                 else "Can you help me find el indicado?")
+
+    def utter_constraint(self, key: str, value: float | str) -> str:
+        if self.language == "en":
+            return phrase_constraint(key, value)
+        return phrase_constraint_es(key, value,
+                                    spanglish=self.language == "es-en")
 
 
 def _phrase_must_have_es(scenario: Scenario, spanglish: bool) -> str:
