@@ -179,3 +179,23 @@ violation-rate 1.0, value 0).
 >
 > No VRAM/throughput number is claimed for Pennywise until it is measured on the
 > V100 (see `PHASE2_NOTES.md`).
+
+---
+
+## v2: PennyPilot (2026-07 →)
+
+Everything above documents v1 (Pennywise) as built and measured — it stays
+unchanged as the record. v2 evolves this repo into **PennyPilot** (multilingual
+multi-turn shopping agent; training system remains the deliverable). The v2
+design summary, pre-registered hypotheses (RLOO-vs-GRPO under sparse rewards,
+equal rollout budget), SLURM runbook, and the SS0–SS13 measurement-campaign
+skeleton live in the private docs repo (`shoprl-fabric-docs`:
+`PENNYPILOT_PLAN.md`, `HYPOTHESES.md`, `RUN_ON_SLURM.md`,
+`STAGE6_BENCHMARKS.md`).
+
+New v2 modules in this repo: `shoprl.actions` (JSON abstract actions),
+`shoprl.lang` (detect/extract/gloss), `shoprl.state` (structured
+DialogueState), `shoprl.env.base` + `shoprl.env.catalog_env` (adapter
+interface + synthetic training env), `shoprl.eval.harness_v2` + `v2_policies`,
+`shoprl.data.sft_v2` (env-recorded demos), `verify_mask` in `shoprl.train.sft`,
+and the validation/gate scripts under `scripts/`.

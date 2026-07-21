@@ -1,97 +1,95 @@
-# Pennywise
+# PennyPilot (evolved from Pennywise)
 
-A multi-turn RL **post-training pipeline** — rollout → reward → RLOO
-optimization → eval → checkpoint — validated on a cost-saving shopping agent that
-asks clarifying questions, recommends the cheapest item that fits, and only adds
-to the cart with explicit permission.
+A multi-turn RL **post-training system** — rollout → verifiable reward → RLOO
+optimization → eval → checkpoint — whose v2 workload is a **multilingual
+(English / Spanish / Spanglish), budget-aware shopping agent** that asks
+clarifying questions, keeps structured environment-side dialogue state, picks
+the cheapest item satisfying every discovered constraint, and **never touches
+the cart without explicit permission**.
 
-**The pipeline is the deliverable; the shopping agent is the workload.** Framing
-target: training-system engineering (stability, observability, efficiency) on
-constrained hardware — 1× V100 32 GB (train) + 2× A10G (rollout).
+**The training system is the deliverable; the agent is the workload.** Target:
+training-infrastructure engineering (stability, observability, efficiency) on
+constrained hardware (1× V100 32 GB, university SLURM).
 
-> Status: **Phase 1 complete** (environment plane, CPU, 25 tests). **Phase 2 in
-> progress** on a real V100 (NEU Explorer): full fine-tune model builder, VRAM
-> profiling, SFT warmup, catalog-grounding fix. **RLOO loop is next.** See
-> [`docs/PHASE2_RESULTS.md`](docs/PHASE2_RESULTS.md) for measured results.
+> **Status (2026-07-21):** v1 (Pennywise) complete — SFT + grounded env +
+> stable 50-step RLOO on the V100 ([docs/PHASE2_RESULTS.md](docs/PHASE2_RESULTS.md)).
+> v2 (PennyPilot) in progress — Stage 1 vertical slice green (88 CPU tests),
+> validation session measured, **SFT next**. Design notes + dev log live in the
+> private companion docs repo (`shoprl-fabric-docs`).
 
-## What makes the task teach the right behaviour
+## How v2 evolved from what was here (reuse, not rewrite)
 
-The shopper's need is **hidden** — budget and a must-have feature are never
-volunteered — so the agent must **ask** to discover them. The reward is
-verifiable (no reward model):
+| Kept from Pennywise/shoprl | v2 adds on top |
+|---|---|
+| Hidden-need scenarios + tunable valid-set knob | **Hard mode**: 2–3 simultaneous must-haves, one reveal per ask — 99/100 scenarios leave a *distractor* (cheapest-visible is invalid) under partial discovery |
+| Permission gate (structural −1.0) + info-gain reward + `SEARCH` grounding | **Structured JSON abstract actions** (`ask_user/search/inspect/select/request_cart_permission/add_to_cart`) behind a `ShoppingEnvironment` adapter interface |
+| User-simulator seams (programmatic `judge_accept`; words swappable) | **Multilingual user** (EN / ES / code-switched) + language layer: detection, bilingual constraint extraction, optional English gloss |
+| SFT masking (assistant-tokens-only, prefix-difference) | **Loud loss-mask verifier** (reference-exact + leak checks) wired into training; model-free tests |
+| RLOO trainer, eval-harness pattern, dashboard/alerts, configs | **Structured `DialogueState`** (corrections update state and invalidate stale plans), v2 eval harness (per-language, held-out), env-recorded SFT demos with build-time correctness guard |
 
-```
-R = 0.4·value_quality + 0.4·accepted + 0.2·asked_permission
-    − 1.0·acted_without_permission + Σ per_turn_info_gain
-```
+## Measured so far (V100, nothing estimated)
 
-- **value_quality** — 0 if the item violates a hard constraint; else price-rank
-  among valid items (cheapest valid = 1.0) → the cost-saving objective.
-- **accepted** — from a programmatic `judge_accept` (objective fit, never
-  persuasion), so a chatty model can't reward-hack acceptance.
-- **permission −1.0** — a hard floor: adding without an explicit accept never
-  produces a legit cart, so the violation can't be bought back with value.
-- **info_gain** — a dense per-turn bonus for a clarifying question that shrinks
-  the space of still-consistent products (counters the "RL kills clarification"
-  collapse).
+- **v1:** full-FT fits (18.6 GB fixed, OOM ~seq 3072); grounding unlock
+  (value 0.34 → 1.0); 50-step RLOO stable (KL ≤ 0.0035, no regression).
+- **v2 validation session (2026-07-21):**
+  - **Precision:** fp16+GradScaler **4.27×** faster than bf16-emulated
+    (3455 vs 810 tok/s), both stable → **fp16 pinned** (v1's "fp16 diverges"
+    was unscaled fp16).
+  - **Scenario Hardness Gate: PASS** — base-model success **12.5%** (n=64,
+    band 10–40%): violation rate 0, ask rate 1.0, dominant failure = invalid
+    actions / max-turns, i.e. real headroom for SFT+RL.
+  - Artifacts: [`profiling/gate/`](profiling/gate/).
 
-The agent discovers the catalog through a `SEARCH` action that returns matching
-products cheapest-first — so "recommend the cheapest valid item" is grounded in
-what it can see, and asking first is structurally the winning move.
+## Safety invariants (enforced by structure, not convention)
 
-## Repo layout
-
-```
-src/shoprl/
-  data/        catalog + hidden-need scenarios + SFT demo generator
-  env/         PennyEnv (conversation state machine), reward, user-simulator seams
-  eval/        held-out eval harness + reference policies (oracle / baseline / violation)
-  train/       full-FT|LoRA model builder + SFT trainer
-scripts/       profile_v100.py, run_sft.py, show_rollout.py, gpu_check.sh
-configs/       qwen2_5_1_5b_instruct_v100.yaml (full-FT, numbers from profiling)
-docs/          PHASE2_RESULTS.md (measured results)
-ARCHITECTURE.md · PHASE2_NOTES.md · PHASE2_PROMPT.md
-```
-
-The package namespace is `shoprl` (a vendored, self-contained subset of the
-[shoprl-fabric](https://github.com/parammadan/shoprl-fabric) substrate this
-project evolves). Pennywise adds the hidden-need environment, the permission
-gate, info-gain, and catalog grounding.
+- An `add_to_cart` without an explicit grant **for that exact SKU** never
+  produces a cart item (`DialogueState.add_to_cart` refuses; reward −1.0 with
+  nothing to offset it). Ambiguous replies are not approval; a user hold
+  ("don't add anything yet") survives further permission requests.
+- Savings are only ever claimed against a defined baseline.
+- The visible-browser demo (Stage 5, Playwright) renders **already-decided**
+  structured actions — the browser is never the training path and never sees
+  real payments/orders.
 
 ## Quickstart
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"        # CPU: pydantic + pyyaml + pytest
-python -m pytest -q            # 25 tests (environment plane, no GPU)
+pip install -e ".[dev]"      # CPU: pydantic + pyyaml + pytest
+python -m pytest -q          # 88 tests, model-free, <2s
 ```
 
-GPU (V100) steps — see [`PHASE2_PROMPT.md`](PHASE2_PROMPT.md) for the runbook:
+GPU (Explorer V100; see the docs repo `RUN_ON_SLURM.md`):
 
 ```bash
-pip install -e ".[train]"      # torch + transformers + peft
-python scripts/profile_v100.py                       # VRAM / max-seq profiling
-python scripts/run_sft.py --method full --dtype bfloat16 --out-dir runs/sft
-python scripts/show_rollout.py --ckpt runs/sft/policy --n 30 --show 3
+bash scripts/validation_session.sh        # egress + precision + vLLM + hardness gate
+python scripts/base_success.py --n 64     # hardness gate alone
+python scripts/bench_precision.py         # fp16+GradScaler vs bf16 micro-bench
+python scripts/vllm_smoke.py              # per-candidate vLLM smoke (own venv)
 ```
 
-## Method & hardware
+v1 paths still work: `scripts/run_sft.py`, `scripts/run_rloo.py`,
+`scripts/show_rollout.py`, `scripts/profile_v100.py`.
 
-- **Model:** Qwen2.5-1.5B-**Instruct**, **full fine-tune** (fits the 32 GB V100 —
-  measured; LoRA is the documented fallback). Instruct base required:
-  conversational ability before RL.
-- **Optimizer of choice:** **RLOO** (REINFORCE leave-one-out) — critic-free,
-  chosen for stability; reuses GRPO's group machinery, changing only the
-  baseline. KL to the frozen SFT reference is the core stability lever.
-- **Hardware:** V100-SXM2 32 GB, fp16/bf16 (Volta → no bf16 tensor cores, no
-  FlashAttention). Rollout scales to 2× A10G in Phase 3.
+## Roadmap (gated; each stage passes before the next)
 
-## Honest findings so far
+1. ~~Env + oracle + vertical slice~~ ✅  2. **SFT warmup** (next: `run_sft_v2`,
+fp16+GradScaler, LoRA) 3. RLOO bring-up 4. GRPO comparison at equal rollout
+budget (pre-registered) 5. WebShop adapter eval 6. Chromium demo (live +
+deterministic replay) 7. Profiling-driven optimization campaign (SS0–SS13:
+no optimization without a measurement).
 
-- **fp16 full fine-tune diverges** (NaN at step 1); **bf16 is stable** — measured,
-  not assumed. (Judged on the loss curve, not the exit code.)
-- **Catalog grounding is required**: without a `SEARCH` action the agent can't
-  identify valid/cheap items and value is unlearnable by RL — added it.
-- No metric here is estimated; each is measured on the V100 or reported absent.
-  ShopRL's RLOO-vs-PPO KL numbers are cited only as the *reason* for choosing
-  RLOO, not presented as this project's results.
+## Known limitations (current, honest)
+
+- Trained-model results for v2 do not exist yet — the only v2 numbers are the
+  validation-session measurements above.
+- The scripted multilingual simulator emits a cosmetic trailing user line
+  after `add_to_cart` (inherited v1 quirk; replaced with the frozen-LLM
+  simulator later).
+- Deeper correction demos (mid-flow budget/party-size changes) need evolving
+  ground truth in the scenario schema — deliberately deferred, not faked.
+- vLLM-on-V100 pin pending its smoke run; WebShop + browser demo not started.
+
+The package namespace stays `shoprl` (vendored substrate of
+[shoprl-fabric](https://github.com/parammadan/shoprl-fabric)); Pennywise → 
+PennyPilot is the project evolving on top of it.
