@@ -17,6 +17,7 @@
 #       smoke script is stdlib+vllm only; just copy scripts/vllm_smoke.py path)
 #   3. source env.sh  (modules, conda env shoprl, HF_HOME, HF_HUB_OFFLINE=1)
 set -uo pipefail
+[ -f env.sh ] && source env.sh    # modules, conda env, HF_HOME, offline flags
 GATE_DIR=${GATE_DIR:-/scratch/madan.pa/pennypilot/gate}
 mkdir -p "$GATE_DIR"
 LOG="$GATE_DIR/session_$(date +%Y%m%d_%H%M).log"
