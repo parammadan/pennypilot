@@ -17,7 +17,10 @@
 #       smoke script is stdlib+vllm only; just copy scripts/vllm_smoke.py path)
 #   3. source env.sh  (modules, conda env shoprl, HF_HOME, HF_HUB_OFFLINE=1)
 set -uo pipefail
-[ -f env.sh ] && source env.sh    # modules, conda env, HF_HOME, offline flags
+[ -f env.sh ] && source env.sh    # modules, conda env, HF_HOME
+# Compute nodes have no egress: force cache-only loads so nothing stalls
+# probing huggingface.co (the egress CHECK below still tests the real thing).
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 GATE_DIR=${GATE_DIR:-/scratch/madan.pa/pennypilot/gate}
 mkdir -p "$GATE_DIR"
 LOG="$GATE_DIR/session_$(date +%Y%m%d_%H%M).log"
@@ -36,6 +39,7 @@ python scripts/bench_precision.py --steps 30 --method lora \
 echo; echo "--- [3/5] vLLM candidate ladder (first PASS wins, then STOP) ---"
 for V in /scratch/madan.pa/venvs/vllm-*; do
   [ -d "$V" ] || continue
+  [ -f "$V.READY" ] || { echo ">>> skipping $V (install not finished)"; continue; }
   echo ">>> candidate venv: $V"
   if VLLM_USE_V1=0 "$V/bin/python" scripts/vllm_smoke.py \
        --model Qwen/Qwen2.5-1.5B-Instruct --gpu-mem-util 0.45 \
