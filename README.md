@@ -1,59 +1,84 @@
-# PennyPilot (evolved from Pennywise)
+# PennyPilot
 
 > *Multi-turn, multilingual RL shopping agent — prefix-cached rollouts,
 > verifiable rewards, permission-gated carts. The training stack is the
 > deliverable.*
 
-A multi-turn RL **post-training system** — rollout → verifiable reward → RLOO
-optimization → eval → checkpoint — whose v2 workload is a **multilingual
-(English / Spanish / Spanglish), budget-aware shopping agent** that asks
-clarifying questions, keeps structured environment-side dialogue state, picks
-the cheapest item satisfying every discovered constraint, and **never touches
+PennyPilot is a **post-training system** — rollout → verifiable reward → RL
+optimization → eval → checkpoint — validated on a shopping assistant that
+understands English, Spanish, and code-switched requests, asks clarifying
+questions only when they pay off, builds budget-aware plans, picks the
+cheapest product satisfying every discovered constraint, and **never touches
 the cart without explicit permission**.
 
-**The training system is the deliverable; the agent is the workload.** Target:
-training-infrastructure engineering (stability, observability, efficiency) on
-constrained hardware (1× V100 32 GB, university SLURM).
+The agent is the workload; the engineering target is the **training
+infrastructure**: multi-turn RL stability, safety gates that survive
+optimization pressure, observability, and profiling-driven rollout efficiency
+— all on constrained hardware (1× V100 32 GB on a university SLURM cluster).
 
-> **Status (2026-07-21):** v1 (Pennywise) complete — SFT + grounded env +
-> stable 50-step RLOO on the V100 ([docs/PHASE2_RESULTS.md](docs/PHASE2_RESULTS.md)).
-> v2 (PennyPilot) in progress — Stage 1 vertical slice green (88 CPU tests),
-> validation session measured, **SFT next**. Design notes + dev log live in the
-> private companion docs repo (`shoprl-fabric-docs`).
+## The task (designed to be hard for the right reasons)
 
-## How v2 evolved from what was here (reuse, not rewrite)
+The shopper's needs are **hidden**: a budget and 2–3 hard requirements that
+are only revealed when the agent asks the right clarifying question — one
+reveal per question. Until the last constraint is discovered, the cheapest
+visible item is almost always a trap (**measured: 99/100 scenarios** leave a
+distractor under partial discovery), so "grab the first result" loses and
+disciplined clarification wins. Rewards are computed against catalog ground
+truth — no reward model, nothing to hack.
 
-| Kept from Pennywise/shoprl | v2 adds on top |
-|---|---|
-| Hidden-need scenarios + tunable valid-set knob | **Hard mode**: 2–3 simultaneous must-haves, one reveal per ask — 99/100 scenarios leave a *distractor* (cheapest-visible is invalid) under partial discovery |
-| Permission gate (structural −1.0) + info-gain reward + `SEARCH` grounding | **Structured JSON abstract actions** (`ask_user/search/inspect/select/request_cart_permission/add_to_cart`) behind a `ShoppingEnvironment` adapter interface |
-| User-simulator seams (programmatic `judge_accept`; words swappable) | **Multilingual user** (EN / ES / code-switched) + language layer: detection, bilingual constraint extraction, optional English gloss |
-| SFT masking (assistant-tokens-only, prefix-difference) | **Loud loss-mask verifier** (reference-exact + leak checks) wired into training; model-free tests |
-| RLOO trainer, eval-harness pattern, dashboard/alerts, configs | **Structured `DialogueState`** (corrections update state and invalidate stale plans), v2 eval harness (per-language, held-out), env-recorded SFT demos with build-time correctness guard |
+Base-model difficulty is **gated, not assumed**: an un-tuned
+Qwen2.5-1.5B-Instruct solves **12.5%** of held-out scenarios (n=64) — enough
+signal to bootstrap, enough headroom to matter (acceptance band 10–40%,
+measured before any training spend).
 
-## Measured so far (V100, nothing estimated)
+## Architecture
 
-- **v1:** full-FT fits (18.6 GB fixed, OOM ~seq 3072); grounding unlock
-  (value 0.34 → 1.0); 50-step RLOO stable (KL ≤ 0.0035, no regression).
-- **v2 validation session (2026-07-21):**
-  - **Precision:** fp16+GradScaler **4.27×** faster than bf16-emulated
-    (3455 vs 810 tok/s), both stable → **fp16 pinned** (v1's "fp16 diverges"
-    was unscaled fp16).
-  - **Scenario Hardness Gate: PASS** — base-model success **12.5%** (n=64,
-    band 10–40%): violation rate 0, ask rate 1.0, dominant failure = invalid
-    actions / max-turns, i.e. real headroom for SFT+RL.
-  - Artifacts: [`profiling/gate/`](profiling/gate/).
+The policy emits **structured JSON actions** — never raw browser selectors:
 
-## Safety invariants (enforced by structure, not convention)
+```json
+{"action": "ask_user", "question": "What is your total budget?"}
+{"action": "search", "query": "family sunscreen SPF 50 under 20 dollars"}
+{"action": "select_product", "product_id": "LAP-0014", "reason": "cheapest valid"}
+{"action": "request_cart_permission", "items": ["LAP-0014"], "estimated_total": 796.29}
+```
 
-- An `add_to_cart` without an explicit grant **for that exact SKU** never
-  produces a cart item (`DialogueState.add_to_cart` refuses; reward −1.0 with
-  nothing to offset it). Ambiguous replies are not approval; a user hold
-  ("don't add anything yet") survives further permission requests.
-- Savings are only ever claimed against a defined baseline.
-- The visible-browser demo (Stage 5, Playwright) renders **already-decided**
-  structured actions — the browser is never the training path and never sees
-  real payments/orders.
+Environment adapters translate them: a **synthetic catalog environment**
+(training), a WebShop adapter (unseen-product eval, planned), and a Playwright
+Chromium mirror (demo/replay **only** — the browser renders decisions already
+made and is never the training path).
+
+Other load-bearing pieces:
+
+- **Structured, environment-side dialogue state** — corrections ("actually,
+  my budget is $90", "no quiero una umbrella", "I already have sunscreen")
+  update state and invalidate stale plans; the model's context window is a
+  view of the state, never the storage.
+- **Language layer** — deterministic EN/ES/code-switch detection and bilingual
+  constraint extraction; constraints survive whatever language they arrive in.
+- **Structural permission gate** — `add_to_cart` without an explicit grant for
+  that exact SKU cannot produce a cart item, so no reward term can buy back a
+  violation. Ambiguous replies are not approval; "don't add anything yet"
+  survives further permission requests.
+- **Loud loss-mask verification** — policy loss on policy tokens only;
+  a reference-exact verifier crashes the run if user/env tokens ever leak into
+  the loss (the failure mode where loss improves while the agent gets worse).
+- **SFT demos recorded from the environment itself** — demonstrations are env
+  transcripts with a build-time correctness guard, not plausible-looking text.
+
+## Measured on the V100 (nothing estimated)
+
+- **Precision:** fp16 + GradScaler **3455 tok/s** vs bf16-emulated 810 tok/s
+  (**4.27×**, both numerically stable, peak 7.34 GB) → fp16 pinned. Unscaled
+  fp16 diverges at step 1 — measured, which is why the scaler is not optional.
+- **Training loop:** end-to-end multi-turn RLOO validated on-cluster — 50
+  observed steps, KL to the frozen reference bounded ≤ 0.0035, clarifying and
+  permission behaviour preserved throughout (no "RL kills asking" collapse).
+- **Memory:** 1.5B full fine-tune fits (18.6 GB fixed footprint; OOM wall
+  ~seq 3072 without FlashAttention on Volta); LoRA is the working default for
+  engine-coexistence and adapter hot-swap.
+- **Task hardness:** base success 12.5% (n=64), violation rate 0, ask rate 1.0
+  — the base model asks but can't drive the action loop to a valid cheapest
+  pick; exactly the gap SFT+RL should close. Artifacts: [`profiling/gate/`](profiling/gate/).
 
 ## Quickstart
 
@@ -63,37 +88,36 @@ pip install -e ".[dev]"      # CPU: pydantic + pyyaml + pytest
 python -m pytest -q          # 88 tests, model-free, <2s
 ```
 
-GPU (Explorer V100; see the docs repo `RUN_ON_SLURM.md`):
+GPU (SLURM):
 
 ```bash
-bash scripts/validation_session.sh        # egress + precision + vLLM + hardness gate
-python scripts/base_success.py --n 64     # hardness gate alone
-python scripts/bench_precision.py         # fp16+GradScaler vs bf16 micro-bench
-python scripts/vllm_smoke.py              # per-candidate vLLM smoke (own venv)
+bash scripts/validation_session.sh        # egress + precision bench + vLLM smoke + hardness gate
+python scripts/base_success.py --n 64     # task-hardness measurement alone
+python scripts/bench_precision.py         # fp16+GradScaler vs bf16 micro-benchmark
+python scripts/vllm_smoke.py              # vLLM-on-Volta candidate smoke (own venv)
 ```
 
-v1 paths still work: `scripts/run_sft.py`, `scripts/run_rloo.py`,
-`scripts/show_rollout.py`, `scripts/profile_v100.py`.
+## Roadmap (gated — each stage must pass before the next)
 
-## Roadmap (gated; each stage passes before the next)
+1. Environment + deterministic oracle + vertical slice ✅
+2. SFT warmup (multilingual demos, corrections, permission edges) ← **next**
+3. RLOO training (bring-up algorithm)
+4. GRPO comparison at equal rollout budget (pre-registered hypotheses)
+5. WebShop adapter evaluation on unseen products
+6. Visible-Chromium demo: live execution + deterministic replay
+7. Profiling campaign: baseline trace → vLLM rollout → prefix caching →
+   concurrency → memory → packing → (Triton kernel only if the re-profile
+   shows the hotspot). Rule: **no optimization without a measurement.**
 
-1. ~~Env + oracle + vertical slice~~ ✅  2. **SFT warmup** (next: `run_sft_v2`,
-fp16+GradScaler, LoRA) 3. RLOO bring-up 4. GRPO comparison at equal rollout
-budget (pre-registered) 5. WebShop adapter eval 6. Chromium demo (live +
-deterministic replay) 7. Profiling-driven optimization campaign (SS0–SS13:
-no optimization without a measurement).
+## Current limitations (honest)
 
-## Known limitations (current, honest)
+- No trained-model results yet — the numbers above are platform and
+  task-design measurements; SFT/RL results land as they are produced.
+- Scripted user simulator has cosmetic phrasing quirks (a frozen-LLM user
+  model slots in behind the same seam later).
+- Mid-flow corrections that change ground truth (budget revisions) are
+  deferred pending scenario-schema support — not faked.
+- WebShop adapter and browser demo not started; vLLM version pin in progress.
 
-- Trained-model results for v2 do not exist yet — the only v2 numbers are the
-  validation-session measurements above.
-- The scripted multilingual simulator emits a cosmetic trailing user line
-  after `add_to_cart` (inherited v1 quirk; replaced with the frozen-LLM
-  simulator later).
-- Deeper correction demos (mid-flow budget/party-size changes) need evolving
-  ground truth in the scenario schema — deliberately deferred, not faked.
-- vLLM-on-V100 pin pending its smoke run; WebShop + browser demo not started.
-
-The package namespace stays `shoprl` (vendored substrate of
-[shoprl-fabric](https://github.com/parammadan/shoprl-fabric)); Pennywise → 
-PennyPilot is the project evolving on top of it.
+Safety by scope: no real purchases, no real-site scraping, no CAPTCHA/auth
+bypass — the storefront is synthetic and the browser is a projection.
