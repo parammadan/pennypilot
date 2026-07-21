@@ -27,6 +27,12 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=64)
     ap.add_argument("--languages", nargs="+", default=["en", "es", "es-en"])
     ap.add_argument("--catalog-size", type=int, default=300)
+    # RL-split calibration knobs: override the held-out defaults to measure a
+    # candidate split's difficulty for the CURRENT checkpoint (target: success
+    # ~0.4-0.6 at RL start, so group rewards keep healthy variance).
+    ap.add_argument("--scenario-seed", type=int, default=None)
+    ap.add_argument("--n-must-haves", type=int, nargs=2, default=None)
+    ap.add_argument("--valid-range", type=int, nargs=2, default=None)
     ap.add_argument("--max-new-tokens", type=int, default=64)
     ap.add_argument("--out", default="runs/eval_v2/report.json")
     args = ap.parse_args()
@@ -48,7 +54,16 @@ def main() -> None:
     model.eval()
 
     catalog = generate_catalog(n=args.catalog_size, seed=0)
-    scenarios = heldout_hard_scenarios(catalog, n=args.n)
+    if args.scenario_seed is not None or args.n_must_haves or args.valid_range:
+        from shoprl.env.scenario import generate_hard_scenarios
+        scenarios = generate_hard_scenarios(
+            catalog, n=args.n, seed=args.scenario_seed or 3000,
+            n_must_haves=tuple(args.n_must_haves or (2, 3)),
+            valid_target_range=tuple(args.valid_range or (5, 20)))
+        print(f"[eval-v2] calibration split: seed={args.scenario_seed} "
+              f"must-haves={args.n_must_haves} valid={args.valid_range}")
+    else:
+        scenarios = heldout_hard_scenarios(catalog, n=args.n)
 
     reports = []
     violations_dir = os.path.join(os.path.dirname(args.out) or ".", "violations")
