@@ -32,7 +32,9 @@ class DialogueState(BaseModel):
     # Goal + constraints.
     shopping_goal: str = ""
     requested_categories: list[str] = Field(default_factory=list)
-    hard_constraints: dict[str, float] = Field(default_factory=dict)
+    # float for numeric constraints (spf_minimum, min_ram); str for categorical
+    # ones (brand) — mirrors the scenario's must_have types.
+    hard_constraints: dict[str, float | str] = Field(default_factory=dict)
     soft_preferences: list[str] = Field(default_factory=list)
     known_constraint_keys: list[str] = Field(default_factory=list)
     items_user_already_owns: list[str] = Field(default_factory=list)

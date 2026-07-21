@@ -84,8 +84,26 @@ class RewardConfig(BaseModel):
     hallucination_penalty: float = 0.50
 
 
+class EnvironmentConfig(BaseModel):
+    # v2 adapter switch (PennyPilot): old and new environments coexist —
+    # synthetic_catalog trains; webshop evaluates; browser_demo demos/replays
+    # only and is never the training path.
+    type: Literal["synthetic_catalog", "webshop", "browser_demo"] = "synthetic_catalog"
+    max_turns: int = 12
+    language: Literal["en", "es", "es-en"] = "en"
+
+
+class LanguageConfig(BaseModel):
+    response_language: Literal["english"] = "english"
+    detect_code_switching: bool = True
+    translation_mode: bool = False     # optional English gloss of the user turn
+    show_detected_intent: bool = False
+
+
 class Config(BaseModel):
     experiment: ExperimentConfig = Field(default_factory=ExperimentConfig)
+    environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
+    language: LanguageConfig = Field(default_factory=LanguageConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
     # Which RL algorithm the unified entry point dispatches to.
     algorithm: Literal["grpo", "rloo", "ppo"] = "grpo"

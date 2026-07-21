@@ -121,3 +121,56 @@ def _phrase_must_have(scenario: Scenario) -> str:
     if k == "brand":
         return f"It has to be a {v}."
     return "That's important to me."
+
+
+class MultilingualScriptedConversation(ScriptedConversation):
+    """ScriptedConversation with Spanish / code-switched (Spanglish) phrasing.
+
+    Same seam contract: only the WORDS change, never a decision. `judge_accept`
+    remains the sole accept authority; hidden fields are still revealed only
+    when the env says so. `language` ∈ {"en", "es", "es-en"}; "en" degrades to
+    the parent behaviour so one class serves the whole eval matrix.
+    """
+
+    def __init__(self, language: str = "en"):
+        self.language = language
+
+    def utter(self, intent: str, scenario: Scenario,
+              accepted: bool | None = None) -> str:
+        if self.language == "en":
+            return super().utter(intent, scenario, accepted)
+        es = self.language == "es"
+        if intent == "budget":
+            return (f"Mi presupuesto es de unos ${scenario.hidden_budget:.0f}."
+                    if es else
+                    f"My budget es como ${scenario.hidden_budget:.0f} más o menos.")
+        if intent == "feature":
+            return _phrase_must_have_es(scenario, spanglish=not es)
+        if intent == "permission":
+            if accepted:
+                return ("Sí, agrégalo por favor." if es
+                        else "Sí, that works — add it please.")
+            return ("No, ese no me sirve." if es
+                    else "No, that one no me sirve.")
+        if intent == "greet":
+            return ("Necesito comprar una laptop, ¿me ayudas?" if es
+                    else "Necesito una laptop nueva, can you help?")
+        return ("¿Me ayudas a encontrar el indicado?" if es
+                else "Can you help me find el indicado?")
+
+
+def _phrase_must_have_es(scenario: Scenario, spanglish: bool) -> str:
+    k, v = scenario.must_have_key, scenario.must_have_value
+    if k == "min_ram":
+        return (f"Necesita al menos {int(v)}GB de RAM." if not spanglish
+                else f"It needs al menos {int(v)}GB de RAM.")
+    if k == "max_weight":
+        return (f"No puede pesar más de {v} libras." if not spanglish
+                else f"No puede pesar more than {v} lbs.")
+    if k == "min_battery":
+        return (f"Necesito al menos {int(v)} horas de batería." if not spanglish
+                else f"I need al menos {int(v)} horas de batería.")
+    if k == "brand":
+        return (f"Tiene que ser una {v}." if not spanglish
+                else f"It has to be una {v}.")
+    return "Eso es importante para mí."
