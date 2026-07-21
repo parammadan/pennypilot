@@ -12,9 +12,10 @@ template(msgs[:i] + generation_prompt)`, and only that span is unmasked.
 """
 from __future__ import annotations
 
-import torch
-
 from shoprl.data.sft import Demo
+
+# torch is imported lazily (inside collate/train_sft) so the pure functions
+# (encode/build_example/verify_mask) stay importable in the CPU test env.
 
 _ROLE = {"agent": "assistant", "user": "user"}
 
@@ -51,7 +52,56 @@ def build_example(tokenizer, demo: Demo, max_len: int) -> dict:
     return {"input_ids": full[:max_len], "labels": labels[:max_len]}
 
 
+def verify_mask(tokenizer, demo, max_len: int = 4096,
+                example: dict | None = None) -> None:
+    """LOUD loss-mask assertion (spec §8): the supervised span must be exactly
+    the agent turns — if env/user/tool tokens leak into the loss, the loss
+    IMPROVES while the policy degrades (user turns are easy to model), so this
+    failure mode must crash, not warn. Call it on real data with the real
+    tokenizer before any SFT/RL run; unit tests drive it with a fake template.
+
+    Checks: (1) labels==input_ids wherever supervised; (2) every agent turn's
+    text appears in the decoded supervised span, in order; (3) no user turn's
+    text leaks into it.
+    """
+    ex = example if example is not None else build_example(tokenizer, demo, max_len)
+    ids, labels = ex["input_ids"], ex["labels"]
+    if example is not None:
+        # Position-exact check vs a fresh rebuild — catches partial leaks and
+        # off-by-one corruption that substring checks below can't see.
+        ref = build_example(tokenizer, demo, max_len)
+        if labels != ref["labels"] or ids != ref["input_ids"]:
+            bad = next(j for j in range(min(len(labels), len(ref["labels"])))
+                       if labels[j] != ref["labels"][j] or ids[j] != ref["input_ids"][j])
+            raise AssertionError(
+                f"example diverges from prefix-difference reference at token {bad}")
+    for j, lab in enumerate(labels):
+        if lab != -100 and lab != ids[j]:
+            raise AssertionError(
+                f"mask misaligned at {j}: label {lab} != input {ids[j]} "
+                "(labels must be the input ids on supervised positions)")
+    decoded = " ".join(tokenizer.decode(
+        [t for t, l in zip(ids, labels) if l != -100]).split())
+    cursor = 0
+    truncated = len(encode(tokenizer, demo_to_messages(demo),
+                           add_generation_prompt=False)) > max_len
+    for t in demo.turns:
+        norm = " ".join(t.text.split())
+        if t.role == "agent":
+            pos = decoded.find(norm, cursor)
+            if pos < 0:
+                if truncated:
+                    break              # spans past max_len are legitimately cut
+                raise AssertionError(
+                    f"agent turn missing from supervised span: {norm[:60]!r}")
+            cursor = pos + len(norm)
+        elif len(norm) > 12 and norm in decoded:
+            raise AssertionError(
+                f"USER/env text leaked into the supervised span: {norm[:60]!r}")
+
+
 def collate(batch: list[dict], pad_id: int, device: str) -> dict:
+    import torch
     width = max(len(ex["input_ids"]) for ex in batch)
     ids, labs, attn = [], [], []
     for ex in batch:
@@ -69,8 +119,10 @@ def train_sft(built, demos: list[Demo], *, max_len: int, batch_size: int = 4,
               log_every: int = 10):
     """Bounded, observed SFT. Yields a metrics dict per step (so the caller can
     log/print live). `built` is a BuiltModel; `built.policy` is trained."""
+    import torch
     model, tok, device = built.policy, built.tokenizer, built.device
     examples = [build_example(tok, d, max_len) for d in demos]
+    verify_mask(tok, demos[0], max_len, example=examples[0])  # fail loudly, not silently
     optimizer = torch.optim.AdamW(
         (p for p in model.parameters() if p.requires_grad), lr=lr)
     model.train()
