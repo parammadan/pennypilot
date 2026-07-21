@@ -1,5 +1,9 @@
 # PennyPilot (evolved from Pennywise)
 
+> *Multi-turn, multilingual RL shopping agent — prefix-cached rollouts,
+> verifiable rewards, permission-gated carts. The training stack is the
+> deliverable.*
+
 A multi-turn RL **post-training system** — rollout → verifiable reward → RLOO
 optimization → eval → checkpoint — whose v2 workload is a **multilingual
 (English / Spanish / Spanglish), budget-aware shopping agent** that asks
