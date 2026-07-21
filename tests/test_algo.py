@@ -14,7 +14,7 @@ def test_rloo_leave_one_out_math():
     advs = RLOO().advantages([1.0, 0.0, 0.0, 0.0])
     assert advs[0] == pytest.approx(1.0)          # 1 - mean(0,0,0)
     assert advs[1] == pytest.approx(-1 / 3)       # 0 - mean(1,0,0)
-    assert sum(advs) == pytest.approx(4 / 3 * 1 - 1)  # sums are consistent
+    assert sum(advs) == pytest.approx(0.0)        # LOO advantages always sum to 0
 
 
 def test_flat_group_gives_zero_update_for_all_algos():
