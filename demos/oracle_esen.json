@@ -1,0 +1,147 @@
+{
+  "catalog_n": 150,
+  "catalog_seed": 0,
+  "language": "es-en",
+  "policy": "oracle (scripted ceiling)",
+  "record": {
+    "scenario_id": "H-0001",
+    "turns": [
+      {
+        "turn": 1,
+        "action": "{\"action\":\"ask_user\",\"question\":\"What is your total budget?\"}",
+        "observation": "My budget es como $2113 m\u00e1s o menos.",
+        "info_gain": 0.012007,
+        "note": "revealed budget",
+        "valid": true
+      },
+      {
+        "turn": 2,
+        "action": "{\"action\":\"ask_user\",\"question\":\"Any must-have feature \u2014 RAM, battery, weight, brand?\"}",
+        "observation": "It needs al menos 16GB de RAM.",
+        "info_gain": 0.021705,
+        "note": "revealed min_ram",
+        "valid": true
+      },
+      {
+        "turn": 3,
+        "action": "{\"action\":\"ask_user\",\"question\":\"Any must-have feature \u2014 RAM, battery, weight, brand?\"}",
+        "observation": "No puede pesar more than 3.0 lbs.",
+        "info_gain": 0.095537,
+        "note": "revealed max_weight",
+        "valid": true
+      },
+      {
+        "turn": 4,
+        "action": "{\"action\":\"ask_user\",\"question\":\"Any must-have feature \u2014 RAM, battery, weight, brand?\"}",
+        "observation": "I need al menos 10 horas de bater\u00eda.",
+        "info_gain": 0.036848,
+        "note": "revealed min_battery",
+        "valid": true
+      },
+      {
+        "turn": 5,
+        "action": "{\"action\":\"search\",\"query\":\"matching laptops, cheapest first\"}",
+        "observation": "Matching products (cheapest first):\n- LAP-0110: $1047, 16GB RAM, 2.9lbs, 10hrs, Apple\n- LAP-0101: $1168, 16GB RAM, 2.6lbs, 12hrs, Lenovo\n- LAP-0131: $1206, 16GB RAM, 3.0lbs, 15hrs, HP\n- LAP-0148: $1250, 16GB RAM, 2.7lbs, 10hrs, Dell\n- LAP-0129: $1306, 16GB RAM, 2.6lbs, 11hrs, Apple\n- LAP-0127: $1306, 16GB RAM, 2.6lbs, 17hrs, Acer\n- LAP-0063: $1307, 16GB RAM, 2.2lbs, 17hrs, HP\n- LAP-0038: $1339, 16GB RAM, 2.2lbs, 12hrs, Dell\n- LAP-0096: $1370, 16GB RAM, 2.7lbs, 18hrs, HP\n- LAP-0072: $1514, 32GB RAM, 2.3lbs, 10hrs, Razer",
+        "info_gain": 0.0,
+        "note": "search -> 10 candidates (known=['budget', 'max_weight', 'min_battery', 'min_ram'])",
+        "valid": true
+      },
+      {
+        "turn": 6,
+        "action": "{\"action\":\"select_product\",\"product_id\":\"LAP-0110\",\"reason\":\"cheapest option meeting your budget and must-have\"}",
+        "observation": "Selected LAP-0110 at $1047.01. Estimated savings $466.63 vs the priciest matching option ($1513.64).",
+        "info_gain": 0.0,
+        "note": "selected LAP-0110 ($1047.01)",
+        "valid": true
+      },
+      {
+        "turn": 7,
+        "action": "{\"action\":\"request_cart_permission\",\"items\":[\"LAP-0110\"],\"estimated_total\":1047.01}",
+        "observation": "S\u00ed, that works \u2014 add it please.",
+        "info_gain": 0.0,
+        "note": "permission for LAP-0110: granted",
+        "valid": true
+      },
+      {
+        "turn": 8,
+        "action": "{\"action\":\"add_to_cart\",\"product_id\":\"LAP-0110\"}",
+        "observation": "Can you help me find el indicado?",
+        "info_gain": 0.0,
+        "note": "added LAP-0110 (permitted)",
+        "valid": true
+      }
+    ],
+    "state": {
+      "conversation_id": "H-0001",
+      "turn_number": 5,
+      "raw_user_message": "I need al menos 10 horas de bater\u00eda.",
+      "detected_languages": [
+        "english",
+        "spanish"
+      ],
+      "code_switched": true,
+      "normalized_english_intent": "[interpreted: min_battery=10]",
+      "shopping_goal": "",
+      "requested_categories": [
+        "laptop"
+      ],
+      "hard_constraints": {
+        "min_ram": 16.0,
+        "max_weight": 3.0,
+        "min_battery": 10.0
+      },
+      "soft_preferences": [],
+      "known_constraint_keys": [
+        "min_ram",
+        "max_weight",
+        "min_battery"
+      ],
+      "items_user_already_owns": [],
+      "forbidden_items": [],
+      "budget_total": 2113.41,
+      "currency": "USD",
+      "number_of_people": null,
+      "number_of_children": null,
+      "age_groups": [],
+      "candidate_products": [
+        "LAP-0110",
+        "LAP-0101",
+        "LAP-0131",
+        "LAP-0148",
+        "LAP-0129",
+        "LAP-0127",
+        "LAP-0063",
+        "LAP-0038",
+        "LAP-0096",
+        "LAP-0072"
+      ],
+      "rejected_products": [],
+      "selected_products": [
+        "LAP-0110"
+      ],
+      "estimated_total": 1047.01,
+      "estimated_savings": 466.63,
+      "baseline_total": 1513.64,
+      "plan_stale": false,
+      "permission_status": "granted",
+      "permission_items": [
+        "LAP-0110"
+      ],
+      "cart_contents": [
+        "LAP-0110"
+      ],
+      "browser_state": "closed",
+      "termination_reason": "cart_action"
+    },
+    "reward": {
+      "value_quality": 1.0,
+      "accepted": 1.0,
+      "asked_permission": 1.0,
+      "acted_without_permission": 0.0,
+      "info_gain": 0.166097,
+      "outcome": 1.0,
+      "total": 1.166097
+    },
+    "opener": "Necesito una laptop nueva, can you help?"
+  }
+}
