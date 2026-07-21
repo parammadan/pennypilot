@@ -123,7 +123,7 @@ class RLConfigV2:
 
 
 def rl_step(policy, reference, tok, optimizer, scaler, catalog, scenarios, idx,
-            cfg: RLConfigV2, system: str) -> dict:
+            cfg: RLConfigV2, system: str, annotate=None) -> dict:
     """One optimizer step: k sampled conversations per scenario (identical
     hidden state), rewards -> algo advantages -> micro-batched per-token PG +
     k3-KL to the frozen reference. fp16 recipe: autocast + GradScaler, same
@@ -152,6 +152,7 @@ def rl_step(policy, reference, tok, optimizer, scaler, catalog, scenarios, idx,
     rewards_all, advs_all, kls = [], [], []
     values, viols, asks, invalids = [], [], [], []
 
+    mark = annotate or (lambda label: None)   # Stage-6 capture seam (SS0)
     for scen in scenarios:
         policy.eval()
         policy.config.use_cache = True
@@ -159,12 +160,14 @@ def rl_step(policy, reference, tok, optimizer, scaler, catalog, scenarios, idx,
             policy.gradient_checkpointing_disable()
         except Exception:
             pass
+        mark("rollout:start")
         trajs = []
         for _ in range(cfg.k):
             env = SyntheticCatalogEnvironment(catalog, scen, idx=idx,
                                               max_turns=cfg.max_turns,
                                               language=cfg.language)
             trajs.append(rollout_v2(agent_fn, env, system))
+        mark("rollout:end")
         rewards = [t.reward for t in trajs]
         advs = algo.advantages(rewards)
         rewards_all += rewards
@@ -181,6 +184,7 @@ def rl_step(policy, reference, tok, optimizer, scaler, catalog, scenarios, idx,
                 gradient_checkpointing_kwargs={"use_reentrant": False})
         except Exception:
             pass
+        mark("update:start")
         for t, A in zip(trajs, advs):
             ids, mask = _sequence_and_mask(tok, t.messages, cfg.max_len)
             asst = torch.tensor(mask[1:], device="cuda", dtype=torch.bool)
@@ -195,12 +199,15 @@ def rl_step(policy, reference, tok, optimizer, scaler, catalog, scenarios, idx,
             loss = (pg + cfg.beta * kl.mean()) / n
             scaler.scale(loss).backward()
             kls.append(float(kl.mean().item()))
+        mark("update:end")
 
+    mark("optimizer:start")
     scaler.unscale_(optimizer)
     grad_norm = torch.nn.utils.clip_grad_norm_(
         (p for p in policy.parameters() if p.requires_grad), cfg.max_grad_norm)
     scaler.step(optimizer)
     scaler.update()
+    mark("optimizer:end")
 
     mean = statistics.mean
     return {
