@@ -1,0 +1,17 @@
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "gpu_mem_util": 0.45,
+  "vllm_version": "0.7.3",
+  "engine_init_seconds": 45.1,
+  "batch_generate": {
+    "prompts": 16,
+    "gen_tokens": 1011,
+    "tokens_per_sec": 692.3,
+    "wall_seconds": 1.46
+  },
+  "prefix_caching": {
+    "init_and_generate_ok": true,
+    "wall_seconds": 5.9
+  },
+  "verdict": "PASS"
+}
