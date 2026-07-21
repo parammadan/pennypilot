@@ -106,3 +106,25 @@ def test_variety(fixture):
     assert set(s["by_language"]) == {"en", "es", "es-en"}
     assert len(s["by_n_asks"]) >= 2             # 2-constraint vs 3-constraint
     assert s["turn_len_max"] > s["turn_len_min"]
+
+
+def test_denied_recovery_varies_pre_denial_depth():
+    """Regression for violation es_H-0014: denials must also arrive LATE
+    (after >1 discovered constraint), and every recovery re-requests
+    permission for the new item before adding."""
+    catalog = generate_catalog(n=300, seed=0)
+    demos = generate_sft_v2_dialogues(catalog, n=200, seed=1, denied_frac=0.5)
+    denied = [d for d in demos if d.kind == "denied_recovery"]
+    assert len(denied) >= 20
+    # After every denial, a request_cart_permission precedes the add.
+    late = 0
+    for d in denied:
+        agent_texts = [t.text for t in d.turns if t.role == "agent"]
+        add_i = next(i for i, t in enumerate(agent_texts) if '"add_to_cart"' in t)
+        assert '"request_cart_permission"' in agent_texts[add_i - 1]
+        denial_i = next(i for i, t in enumerate(agent_texts)
+                        if '"request_cart_permission"' in t)
+        asks_before_denial = sum('"ask_user"' in t for t in agent_texts[:denial_i])
+        if asks_before_denial > 2:      # budget + >=2 features discovered pre-denial
+            late += 1
+    assert late > 0, "no late-denial demos generated"

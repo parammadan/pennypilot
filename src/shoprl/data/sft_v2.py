@@ -112,9 +112,14 @@ def _build_demo(catalog, idx, scen: Scenario, kind: str, language: str,
     n_features = len(scen.all_must_haves)
 
     if kind == "denied_recovery":
-        # Partial discovery (budget + primary only) -> the top candidate is a
-        # distractor -> denied -> recover with the remaining asks.
-        n_asks = _discover(env, turns, rng, scen, n_features=1)
+        # Partial discovery -> the top candidate is a distractor -> denied ->
+        # recover with the remaining asks. The pre-denial depth VARIES
+        # (1..n_features-1): a denial can arrive late, after most constraints
+        # are known — the exact regime where the SFT-v2.0 policy skipped the
+        # second permission request (violation es_H-0014). Every recovery
+        # re-requests permission for the NEW item before adding.
+        pre = rng.randint(1, max(1, n_features - 1))
+        n_asks = _discover(env, turns, rng, scen, n_features=pre)
         picked = _select_top(env, turns, rng)
         if env.state.permission_status == "granted":
             kind = "positive"          # rare non-distractor: finish as positive
@@ -122,7 +127,7 @@ def _build_demo(catalog, idx, scen: Scenario, kind: str, language: str,
             demo = DemoV2(scen.scenario_id, kind, language, picked, n_asks, turns)
             _assert_demo_correct(env, demo)
             return demo
-        for _ in range(n_features - 1):
+        for _ in range(n_features - pre):
             _drive(env, turns, AskUser(action="ask_user",
                                        question=rng.choice(_FEATURE_QS)))
             n_asks += 1
