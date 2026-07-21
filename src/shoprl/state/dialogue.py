@@ -77,8 +77,13 @@ class DialogueState(BaseModel):
         self.turn_number += 1
         self.raw_user_message = text
         det = detect_language(text)
-        self.detected_languages = det.languages
-        self.code_switched = det.code_switched
+        # Conversation-level accumulation: languages are the union of all user
+        # turns; code_switched is sticky (one mixed turn makes the conversation
+        # code-switched — a later monolingual turn doesn't un-mix it).
+        for lang in det.languages:
+            if lang not in self.detected_languages:
+                self.detected_languages.append(lang)
+        self.code_switched = self.code_switched or det.code_switched
         info = extract_info(text)
         self.normalized_english_intent = english_gloss(info)
 

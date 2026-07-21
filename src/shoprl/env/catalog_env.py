@@ -80,6 +80,8 @@ class SyntheticCatalogEnvironment:
         opener = self.conversation.utter("greet", self.scenario)
         self.state.observe_user_message(opener)
         self._last_obs = opener
+        self.opener = opener
+        self.opener_intent = self.state.normalized_english_intent
         return opener
 
     def observe(self) -> str:
