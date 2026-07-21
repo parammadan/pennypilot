@@ -51,13 +51,24 @@ def main() -> None:
     scenarios = heldout_hard_scenarios(catalog, n=args.n)
 
     reports = []
+    violations_dir = os.path.join(os.path.dirname(args.out) or ".", "violations")
     t0 = time.time()
     for lang in args.languages:
+        def dump_if_violation(ep, env, _lang=lang):
+            if not ep.violation:
+                return
+            from shoprl.transcript import render_transcript
+            os.makedirs(violations_dir, exist_ok=True)
+            p = os.path.join(violations_dir, f"{_lang}_{ep.scenario_id}.txt")
+            with open(p, "w") as f:
+                f.write(render_transcript(env, env.calculate_outcome()))
+            print(f"[eval-v2] VIOLATION transcript -> {p}")
+
         rep = evaluate_v2(catalog, scenarios,
                           lambda: HFPolicyV2(model, tok,
                                              max_new_tokens=args.max_new_tokens),
                           name=os.path.basename(args.ckpt or args.model),
-                          language=lang)
+                          language=lang, on_episode=dump_if_violation)
         print(rep.as_row())
         reports.append(rep.__dict__)
 

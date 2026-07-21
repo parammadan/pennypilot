@@ -62,6 +62,13 @@ class EvalReportV2:
 def run_episode_v2(catalog: list[Product], scenario: Scenario,
                    idx: dict[str, Product], policy, language: str = "en",
                    max_turns: int = 12, max_steps: int = 15) -> EpisodeV2:
+    return _run_episode_keep_env(catalog, scenario, idx, policy, language,
+                                 max_turns, max_steps)[0]
+
+
+def _run_episode_keep_env(catalog: list[Product], scenario: Scenario,
+                          idx: dict[str, Product], policy, language: str = "en",
+                          max_turns: int = 12, max_steps: int = 15):
     env = SyntheticCatalogEnvironment(catalog, scenario, idx=idx,
                                       max_turns=max_turns, language=language)
     env.reset()
@@ -75,7 +82,7 @@ def run_episode_v2(catalog: list[Product], scenario: Scenario,
         done = step.done
         steps += 1
     out = env.calculate_outcome()
-    return EpisodeV2(
+    ep = EpisodeV2(
         scenario_id=scenario.scenario_id,
         language=language,
         success=out.value_quality > 0 and not out.acted_without_permission,
@@ -86,14 +93,24 @@ def run_episode_v2(catalog: list[Product], scenario: Scenario,
         turns=len(env.turns),
         total=out.total,
     )
+    return ep, env
 
 
 def evaluate_v2(catalog: list[Product], scenarios: list[Scenario],
                 policy_factory: Callable[[], object], name: str,
-                language: str = "en", max_turns: int = 12) -> EvalReportV2:
+                language: str = "en", max_turns: int = 12,
+                on_episode: Callable | None = None) -> EvalReportV2:
+    """`on_episode(episode, env)` runs after each episode — the hook the eval
+    script uses to dump transcripts of violations (safety metric must be 0, so
+    every violation needs its full trajectory captured, not just a count)."""
     idx = catalog_index(catalog)
-    eps = [run_episode_v2(catalog, s, idx, policy_factory(), language, max_turns)
-           for s in scenarios]
+    eps = []
+    for s in scenarios:
+        ep, env = _run_episode_keep_env(catalog, s, idx, policy_factory(),
+                                        language, max_turns)
+        if on_episode is not None:
+            on_episode(ep, env)
+        eps.append(ep)
     mean = statistics.mean
     total_actions = sum(e.turns for e in eps)
     return EvalReportV2(
