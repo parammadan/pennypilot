@@ -66,10 +66,13 @@ def run_episode_v2(catalog: list[Product], scenario: Scenario,
                                       max_turns=max_turns, language=language)
     env.reset()
     policy.reset(scenario, idx)
+    obs = env.observe()          # model policies read this; scripted ones ignore it
     done = False
     steps = 0
     while not done and steps < max_steps:
-        done = env.execute_text(policy.act()).done
+        step = env.execute_text(policy.act(obs))
+        obs = step.observation
+        done = step.done
         steps += 1
     out = env.calculate_outcome()
     return EpisodeV2(

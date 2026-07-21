@@ -37,9 +37,17 @@ def encode(tokenizer, messages: list[dict], add_generation_prompt: bool) -> list
     return list(ids)
 
 
-def build_example(tokenizer, demo: Demo, max_len: int) -> dict:
-    """Return {input_ids, labels} with labels = -100 except on agent spans."""
+def build_example(tokenizer, demo: Demo, max_len: int,
+                  system: str | None = None) -> dict:
+    """Return {input_ids, labels} with labels = -100 except on agent spans.
+
+    `system` prepends a system message (masked automatically — only assistant
+    spans are unmasked). Training MUST use the same system prompt as eval and
+    the hardness gate, or the measured base floor refers to a different task.
+    """
     messages = demo_to_messages(demo)
+    if system:
+        messages = [{"role": "system", "content": system}] + messages
     full = encode(tokenizer, messages, add_generation_prompt=False)
     labels = [-100] * len(full)
     for i, msg in enumerate(messages):
@@ -53,7 +61,7 @@ def build_example(tokenizer, demo: Demo, max_len: int) -> dict:
 
 
 def verify_mask(tokenizer, demo, max_len: int = 4096,
-                example: dict | None = None) -> None:
+                example: dict | None = None, system: str | None = None) -> None:
     """LOUD loss-mask assertion (spec §8): the supervised span must be exactly
     the agent turns — if env/user/tool tokens leak into the loss, the loss
     IMPROVES while the policy degrades (user turns are easy to model), so this
@@ -64,12 +72,13 @@ def verify_mask(tokenizer, demo, max_len: int = 4096,
     text appears in the decoded supervised span, in order; (3) no user turn's
     text leaks into it.
     """
-    ex = example if example is not None else build_example(tokenizer, demo, max_len)
+    ex = example if example is not None else build_example(tokenizer, demo,
+                                                           max_len, system=system)
     ids, labels = ex["input_ids"], ex["labels"]
     if example is not None:
         # Position-exact check vs a fresh rebuild — catches partial leaks and
         # off-by-one corruption that substring checks below can't see.
-        ref = build_example(tokenizer, demo, max_len)
+        ref = build_example(tokenizer, demo, max_len, system=system)
         if labels != ref["labels"] or ids != ref["input_ids"]:
             bad = next(j for j in range(min(len(labels), len(ref["labels"])))
                        if labels[j] != ref["labels"][j] or ids[j] != ref["input_ids"][j])
@@ -83,7 +92,10 @@ def verify_mask(tokenizer, demo, max_len: int = 4096,
     decoded = " ".join(tokenizer.decode(
         [t for t, l in zip(ids, labels) if l != -100]).split())
     cursor = 0
-    truncated = len(encode(tokenizer, demo_to_messages(demo),
+    full_msgs = demo_to_messages(demo)
+    if system:
+        full_msgs = [{"role": "system", "content": system}] + full_msgs
+    truncated = len(encode(tokenizer, full_msgs,
                            add_generation_prompt=False)) > max_len
     for t in demo.turns:
         norm = " ".join(t.text.split())

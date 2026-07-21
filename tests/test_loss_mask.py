@@ -95,3 +95,17 @@ def test_corrupted_mask_fails_loudly(demos):
     allmasked["labels"] = [-100] * len(ex["labels"])
     with pytest.raises(AssertionError):
         verify_mask(tok, demo, example=allmasked)
+
+
+def test_system_prompt_is_masked_and_verifies(demos):
+    from shoprl.data.prompts_v2 import SYSTEM_PROMPT_V2
+    tok = FakeChatTok()
+    demo = demos[0]
+    ex = build_example(tok, demo, max_len=8192, system=SYSTEM_PROMPT_V2)
+    verify_mask(tok, demo, max_len=8192, example=ex, system=SYSTEM_PROMPT_V2)
+    # The system span sits at the front and must be fully masked.
+    sys_len = len(tok.apply_chat_template(
+        [{"role": "system", "content": SYSTEM_PROMPT_V2}])["input_ids"])
+    assert all(l == -100 for l in ex["labels"][:sys_len])
+    # And the example is strictly longer than the no-system one.
+    assert len(ex["input_ids"]) > len(build_example(tok, demo, 8192)["input_ids"])
