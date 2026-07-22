@@ -62,6 +62,10 @@ class GRPONoStd:
 
 
 ALGORITHMS = {a.name: a for a in (RLOO(), GRPO(), GRPONoStd())}
+# H2's registered mechanism: same advantage rules, but each rollout batch is
+# reused for `reuse_epochs` clipped updates (PPO-style ratio vs the behavior
+# policy). Selected via RLConfigV2.reuse_epochs — the algorithm seam stays
+# thin (advantage rule unchanged); reuse is a train_step property.
 
 
 # ---- rollout ---------------------------------------------------------------
@@ -120,6 +124,8 @@ class RLConfigV2:
     lr: float = 1e-6
     max_grad_norm: float = 1.0
     language: str = "es-en"
+    reuse_epochs: int = 1        # >1 = clipped multi-epoch reuse (H2 arm)
+    clip_eps: float = 0.2
 
 
 def rl_step(policy, reference, tok, optimizer, scaler, catalog, scenarios, idx,
@@ -185,28 +191,66 @@ def rl_step(policy, reference, tok, optimizer, scaler, catalog, scenarios, idx,
         except Exception:
             pass
         mark("update:start")
-        for t, A in zip(trajs, advs):
-            ids, mask = _sequence_and_mask(tok, t.messages, cfg.max_len)
-            asst = torch.tensor(mask[1:], device="cuda", dtype=torch.bool)
-            if asst.sum() == 0:
-                continue
-            with torch.autocast("cuda", dtype=torch.float16):
-                lp_pol = _token_logprobs(policy, ids, "cuda")
-                with torch.no_grad():
-                    lp_ref = _token_logprobs(reference, ids, "cuda")
-            pg = -A * lp_pol[asst].mean()          # per-token normalization
-            kl = _k3_kl(lp_pol[asst], lp_ref[asst])
-            loss = (pg + cfg.beta * kl.mean()) / n
-            scaler.scale(loss).backward()
-            kls.append(float(kl.mean().item()))
+        if cfg.reuse_epochs <= 1:
+            # single-update path — byte-identical to the runs already published
+            for t, A in zip(trajs, advs):
+                ids, mask = _sequence_and_mask(tok, t.messages, cfg.max_len)
+                asst = torch.tensor(mask[1:], device="cuda", dtype=torch.bool)
+                if asst.sum() == 0:
+                    continue
+                with torch.autocast("cuda", dtype=torch.float16):
+                    lp_pol = _token_logprobs(policy, ids, "cuda")
+                    with torch.no_grad():
+                        lp_ref = _token_logprobs(reference, ids, "cuda")
+                pg = -A * lp_pol[asst].mean()      # per-token normalization
+                kl = _k3_kl(lp_pol[asst], lp_ref[asst])
+                loss = (pg + cfg.beta * kl.mean()) / n
+                scaler.scale(loss).backward()
+                kls.append(float(kl.mean().item()))
+        else:
+            # clipped multi-epoch reuse (H2's registered mechanism): behavior
+            # logprobs captured once, then reuse_epochs clipped updates.
+            prepared = []
+            with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
+                for t, A in zip(trajs, advs):
+                    ids, mask = _sequence_and_mask(tok, t.messages, cfg.max_len)
+                    asst = torch.tensor(mask[1:], device="cuda",
+                                        dtype=torch.bool)
+                    if asst.sum() == 0:
+                        continue
+                    lp_old = _token_logprobs(policy, ids, "cuda")[asst].detach()
+                    prepared.append((ids, asst, A, lp_old))
+            for _epoch in range(cfg.reuse_epochs):
+                optimizer.zero_grad(set_to_none=True)
+                for ids, asst, A, lp_old in prepared:
+                    with torch.autocast("cuda", dtype=torch.float16):
+                        lp_new = _token_logprobs(policy, ids, "cuda")
+                        with torch.no_grad():
+                            lp_ref = _token_logprobs(reference, ids, "cuda")
+                    ratio = torch.exp(lp_new[asst] - lp_old)
+                    clipped = torch.clamp(ratio, 1 - cfg.clip_eps,
+                                          1 + cfg.clip_eps)
+                    pg = -torch.min(ratio * A, clipped * A).mean()
+                    kl = _k3_kl(lp_new[asst], lp_ref[asst])
+                    loss = (pg + cfg.beta * kl.mean()) / n
+                    scaler.scale(loss).backward()
+                    kls.append(float(kl.mean().item()))
+                scaler.unscale_(optimizer)
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    (p for p in policy.parameters() if p.requires_grad),
+                    cfg.max_grad_norm)
+                scaler.step(optimizer)
+                scaler.update()
         mark("update:end")
 
     mark("optimizer:start")
-    scaler.unscale_(optimizer)
-    grad_norm = torch.nn.utils.clip_grad_norm_(
-        (p for p in policy.parameters() if p.requires_grad), cfg.max_grad_norm)
-    scaler.step(optimizer)
-    scaler.update()
+    if cfg.reuse_epochs <= 1:
+        scaler.unscale_(optimizer)
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            (p for p in policy.parameters() if p.requires_grad),
+            cfg.max_grad_norm)
+        scaler.step(optimizer)
+        scaler.update()
     mark("optimizer:end")
 
     mean = statistics.mean

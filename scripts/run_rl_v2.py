@@ -38,7 +38,11 @@ def main() -> None:
                     help="disjoint from SFT(0)/gate(11)/eval(5000)")
     ap.add_argument("--n-must-haves", type=int, nargs=2, default=[3, 4])
     ap.add_argument("--valid-range", type=int, nargs=2, default=[3, 10])
+    ap.add_argument("--reuse-epochs", type=int, default=1,
+                    help=">1 = clipped multi-epoch reuse (H2 mechanism arm)")
+    ap.add_argument("--clip-eps", type=float, default=0.2)
     ap.add_argument("--save-every", type=int, default=10)
+    ap.add_argument("--resume", default=None, help='"latest" or a step-N dir')
     ap.add_argument("--out-dir", default="runs/rl_v2")
     args = ap.parse_args()
 
@@ -91,7 +95,8 @@ def main() -> None:
                      max_turns=args.max_turns,
                      max_new_tokens=args.max_new_tokens, max_len=args.max_len,
                      temperature=args.temperature, beta=args.beta, lr=args.lr,
-                     language=args.language)
+                     language=args.language, reuse_epochs=args.reuse_epochs,
+                     clip_eps=args.clip_eps)
 
     os.makedirs(args.out_dir, exist_ok=True)
     mpath = os.path.join(args.out_dir, "metrics.jsonl")
@@ -100,13 +105,44 @@ def main() -> None:
                   lambda *_: (print("[rl-v2] SIGTERM -> save+exit"),
                               stop.__setitem__("now", True)))
 
-    def save(tag: str) -> None:
+    def save(tag: str, step: int = 0) -> None:
         d = os.path.join(args.out_dir, tag)
         policy.save_pretrained(d)
         tok.save_pretrained(d)
-        print(f"[rl-v2] saved {d}")
+        torch.save({
+            "step": step,
+            "lora": {k2: v for k2, v in policy.state_dict().items()
+                     if "lora" in k2.lower()},
+            "optimizer": optimizer.state_dict(),
+            "scaler": scaler.state_dict(),
+            "rng_cpu": torch.get_rng_state(),
+            "rng_cuda": torch.cuda.get_rng_state_all(),
+        }, os.path.join(d, "train_state.pt"))
+        print(f"[rl-v2] saved {d} (train_state incl. optimizer)")
 
-    for step in range(args.steps):
+    def latest_checkpoint() -> str | None:
+        if not os.path.isdir(args.out_dir):
+            return None
+        steps = [(int(x.split("-")[1]), x) for x in os.listdir(args.out_dir)
+                 if x.startswith("step-") and x.split("-")[1].isdigit()]
+        return os.path.join(args.out_dir, max(steps)[1]) if steps else None
+
+    start_step = 0
+    resume_dir = (latest_checkpoint() if args.resume == "latest"
+                  else args.resume)
+    if resume_dir:
+        st = torch.load(os.path.join(resume_dir, "train_state.pt"),
+                        weights_only=False)
+        missing = policy.load_state_dict(st["lora"], strict=False)
+        optimizer.load_state_dict(st["optimizer"])
+        scaler.load_state_dict(st["scaler"])
+        torch.set_rng_state(st["rng_cpu"])
+        torch.cuda.set_rng_state_all(st["rng_cuda"])
+        start_step = st["step"]
+        print(f"[rl-v2] RESUMED from {resume_dir} at step {start_step} "
+              f"(unexpected keys: {len(missing.unexpected_keys)})")
+
+    for step in range(start_step, args.steps):
         picks = [pool[(step * args.prompts_per_step + j) % len(pool)]
                  for j in range(args.prompts_per_step)]
         t0 = time.time()
@@ -125,11 +161,12 @@ def main() -> None:
             print("[rl-v2] WARNING: permission violation in rollouts — "
                   "watch this metric; RL must never trade it away")
         if (step + 1) % args.save_every == 0 and (step + 1) < args.steps:
-            save(f"step-{step+1}")
+            save(f"step-{step+1}", step + 1)
         if stop["now"]:
-            save(f"step-{step+1}-sigterm")
+            save(f"step-{step+1}", step + 1)   # resumable SIGTERM checkpoint
+            print(f"[rl-v2] SIGTERM checkpoint at step {step+1}; exiting 0")
             raise SystemExit(0)
-    save("policy")
+    save("policy", args.steps)
     print(f"[rl-v2] done -> {args.out_dir}/policy")
 
 
