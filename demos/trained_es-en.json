@@ -1,0 +1,142 @@
+{
+  "catalog_n": 150,
+  "catalog_seed": 0,
+  "language": "es-en",
+  "policy": "trained (rloo50_v2)",
+  "record": {
+    "scenario_id": "H-0002",
+    "turns": [
+      {
+        "turn": 1,
+        "action": "{\"action\":\"ask_user\",\"question\":\"What is your total budget?\"}",
+        "observation": "My budget es como $2210 m\u00e1s o menos.",
+        "info_gain": 0.006539,
+        "note": "revealed budget",
+        "valid": true
+      },
+      {
+        "turn": 2,
+        "action": "{\"action\":\"ask_user\",\"question\":\"Are there any other requirements it absolutely must meet?\"}",
+        "observation": "It needs al menos 64GB de RAM.",
+        "info_gain": 0.117157,
+        "note": "revealed min_ram",
+        "valid": true
+      },
+      {
+        "turn": 3,
+        "action": "{\"action\":\"ask_user\",\"question\":\"Anything else that's a hard requirement?\"}",
+        "observation": "No puede pesar more than 3.5 lbs.",
+        "info_gain": 0.097377,
+        "note": "revealed max_weight",
+        "valid": true
+      },
+      {
+        "turn": 4,
+        "action": "{\"action\":\"ask_user\",\"question\":\"Any must-have feature \u2014 RAM, battery, weight, or brand?\"}",
+        "observation": "Can you help me find el indicado?",
+        "info_gain": 0.0,
+        "note": "redundant/irrelevant ask (no new info)",
+        "valid": true
+      },
+      {
+        "turn": 5,
+        "action": "{\"action\":\"search\",\"query\":\"best-value matching laptops\"}",
+        "observation": "Matching products (cheapest first):\n- LAP-0119: $2080, 64GB RAM, 2.4lbs, 5hrs, Dell\n- LAP-0027: $2113, 64GB RAM, 2.9lbs, 10hrs, Acer\n- LAP-0135: $2130, 64GB RAM, 3.1lbs, 10hrs, HP\n- LAP-0099: $2187, 64GB RAM, 2.4lbs, 5hrs, HP\n- LAP-0044: $2206, 64GB RAM, 2.6lbs, 4hrs, HP\n- LAP-0097: $2208, 64GB RAM, 2.7lbs, 9hrs, Dell\n- LAP-0132: $2210, 64GB RAM, 2.5lbs, 5hrs, Asus",
+        "info_gain": 0.0,
+        "note": "search -> 7 candidates (known=['budget', 'max_weight', 'min_ram'])",
+        "valid": true
+      },
+      {
+        "turn": 6,
+        "action": "{\"action\":\"select_product\",\"product_id\":\"LAP-0119\",\"reason\":\"cheapest option meeting every stated requirement\"}",
+        "observation": "Selected LAP-0119 at $2080.47. Estimated savings $129.70 vs the priciest matching option ($2210.17).",
+        "info_gain": 0.0,
+        "note": "selected LAP-0119 ($2080.47)",
+        "valid": true
+      },
+      {
+        "turn": 7,
+        "action": "{\"action\":\"request_cart_permission\",\"items\":[\"LAP-0119\"],\"estimated_total\":2080.47}",
+        "observation": "S\u00ed, that works \u2014 add it please.",
+        "info_gain": 0.0,
+        "note": "permission for LAP-0119: granted",
+        "valid": true
+      },
+      {
+        "turn": 8,
+        "action": "{\"action\":\"add_to_cart\",\"product_id\":\"LAP-0119\"}",
+        "observation": "Can you help me find el indicado?",
+        "info_gain": 0.0,
+        "note": "added LAP-0119 (permitted)",
+        "valid": true
+      }
+    ],
+    "state": {
+      "conversation_id": "H-0002",
+      "turn_number": 4,
+      "raw_user_message": "No puede pesar more than 3.5 lbs.",
+      "detected_languages": [
+        "english",
+        "spanish"
+      ],
+      "code_switched": true,
+      "normalized_english_intent": "",
+      "shopping_goal": "",
+      "requested_categories": [
+        "laptop"
+      ],
+      "hard_constraints": {
+        "min_ram": 64.0,
+        "max_weight": 3.5
+      },
+      "soft_preferences": [],
+      "known_constraint_keys": [
+        "min_ram",
+        "max_weight"
+      ],
+      "items_user_already_owns": [],
+      "forbidden_items": [],
+      "budget_total": 2210.18,
+      "currency": "USD",
+      "number_of_people": null,
+      "number_of_children": null,
+      "age_groups": [],
+      "candidate_products": [
+        "LAP-0119",
+        "LAP-0027",
+        "LAP-0135",
+        "LAP-0099",
+        "LAP-0044",
+        "LAP-0097",
+        "LAP-0132"
+      ],
+      "rejected_products": [],
+      "selected_products": [
+        "LAP-0119"
+      ],
+      "estimated_total": 2080.47,
+      "estimated_savings": 129.7,
+      "baseline_total": 2210.17,
+      "plan_stale": false,
+      "permission_status": "granted",
+      "permission_items": [
+        "LAP-0119"
+      ],
+      "cart_contents": [
+        "LAP-0119"
+      ],
+      "browser_state": "closed",
+      "termination_reason": "cart_action"
+    },
+    "reward": {
+      "value_quality": 1.0,
+      "accepted": 1.0,
+      "asked_permission": 1.0,
+      "acted_without_permission": 0.0,
+      "info_gain": 0.221073,
+      "outcome": 1.0,
+      "total": 1.221073
+    },
+    "opener": "Necesito una laptop nueva, can you help?"
+  }
+}

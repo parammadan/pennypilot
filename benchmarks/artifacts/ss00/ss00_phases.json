@@ -1,0 +1,13 @@
+{
+  "phases": {
+    "rollout": 84.58,
+    "update": 3.57,
+    "optimizer": 0.12
+  },
+  "fractions": {
+    "rollout": 0.9581,
+    "update": 0.0405,
+    "optimizer": 0.0013
+  },
+  "window_s": 88.28
+}

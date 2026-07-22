@@ -1,0 +1,10 @@
+{
+  "episodes": 16,
+  "prefix_caching": false,
+  "gen_tokens": 3840,
+  "engine_tokens_per_sec": 19.3,
+  "loop_tokens_per_sec": 19.3,
+  "gen_seconds": 199.3,
+  "wall_seconds": 199.3,
+  "reward_mean": 1.316
+}

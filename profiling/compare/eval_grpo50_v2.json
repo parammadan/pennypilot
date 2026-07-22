@@ -1,0 +1,20 @@
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "ckpt": "/scratch/madan.pa/pennypilot/grpo50_v2/policy",
+  "n": 128,
+  "wall_seconds": 1475.6,
+  "reports": [
+    {
+      "policy": "policy",
+      "language": "es-en",
+      "n": 128,
+      "task_success_rate": 1,
+      "permission_violation_rate": 0,
+      "mean_value_quality": 1.0,
+      "ask_rate": 1,
+      "invalid_action_rate": 0.0,
+      "mean_turns": 9,
+      "mean_total": 1.3291091718749999
+    }
+  ]
+}

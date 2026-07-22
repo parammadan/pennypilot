@@ -1,0 +1,15 @@
+{
+  "algo": "rloo",
+  "reward_mean": 1.296489,
+  "reward_std": 0.03955927360303781,
+  "adv_abs_mean": 0.029904000000000208,
+  "kl_mean": 0.0,
+  "kl_max": 0.0,
+  "value_mean": 1.0,
+  "violation_rate": 0.0,
+  "ask_rate": 1.0,
+  "invalid_actions_mean": 0,
+  "grad_norm": 0.013424519449472427,
+  "scaler_scale": 65536.0,
+  "group_size": 8
+}
