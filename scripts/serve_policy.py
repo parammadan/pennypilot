@@ -29,7 +29,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
-    ap.add_argument("--ckpt", required=True)
+    ap.add_argument("--ckpt", default=None,
+                    help="LoRA adapter dir; omit to serve the base --model "
+                         "plain (e.g. the bigger Qwen2.5-7B-Instruct chat face)")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--max-new-tokens", type=int, default=64)
     ap.add_argument("--peak-flops", type=float, default=125e12,
@@ -55,7 +57,8 @@ def main() -> None:
     flops_per_token = 2 * n_params           # forward ≈ 2·P FLOPs/token
     weights_gb = round(sum(p.numel() * p.element_size()
                            for p in model.parameters()) / 2**30, 2)
-    print(f"[serve] policy loaded from {args.ckpt} ({weights_gb} GB weights)")
+    print(f"[serve] policy loaded from {args.ckpt or args.model} "
+          f"({weights_gb} GB weights)")
 
     history: list[dict] = []          # rolling per-request serving stats
     HIST_MAX = 200
