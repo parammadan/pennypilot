@@ -43,6 +43,13 @@ def main() -> None:
 
     from transformers import TextIteratorStreamer
 
+    from shoprl.actions import parse_agent_action
+    from shoprl.data.catalog import generate_catalog
+
+    known_skus = {pr.sku for pr in generate_catalog(n=300, seed=0)}
+    MAX_PROMPT_TOKENS = 6144        # graceful-rejection guard (fits KV budget)
+    CTX_KEEP_TURNS = 8              # overflow: keep system + newest N messages
+
     model, tok = load_hf_policy(args.model, args.ckpt)
     n_params = sum(p.numel() for p in model.parameters())
     flops_per_token = 2 * n_params           # forward ≈ 2·P FLOPs/token
@@ -52,13 +59,28 @@ def main() -> None:
 
     history: list[dict] = []          # rolling per-request serving stats
     HIST_MAX = 200
+    rejections = {"count": 0}
 
     @torch.no_grad()
     def act(messages: list[dict]) -> dict:
+        truncated = False
         enc = tok.apply_chat_template(messages, add_generation_prompt=True,
                                       tokenize=True, return_dict=True,
                                       return_tensors="pt")
-        ids = enc["input_ids"].to("cuda")
+        ids = enc["input_ids"]
+        if ids.shape[1] > MAX_PROMPT_TOKENS:   # context-overflow probe path:
+            # graceful truncation — keep the system prompt + newest turns.
+            keep = ([messages[0]] if messages and
+                    messages[0]["role"] == "system" else [])
+            messages = keep + messages[-CTX_KEEP_TURNS:]
+            enc = tok.apply_chat_template(messages, add_generation_prompt=True,
+                                          tokenize=True, return_dict=True,
+                                          return_tensors="pt")
+            ids = enc["input_ids"]
+            truncated = True
+            print(f"[serve] GRACEFUL TRUNCATION: kept system + last "
+                  f"{CTX_KEEP_TURNS} messages ({ids.shape[1]} tokens)")
+        ids = ids.to("cuda")
         streamer = TextIteratorStreamer(tok, skip_prompt=True,
                                         skip_special_tokens=True)
         t0 = time.time()
@@ -75,10 +97,17 @@ def main() -> None:
         ttft_ms = round((stamps[0] - t0) * 1000, 1) if stamps else None
         itl_ms = (round(((stamps[-1] - stamps[0]) / max(len(stamps) - 1, 1))
                         * 1000, 2) if len(stamps) > 1 else None)
+        parsed = parse_agent_action(text)          # HUD: schema validity
+        pid = getattr(parsed.action, "product_id", None) if parsed.ok else None
+        mentioned = ([pid] if pid else []) + (
+            getattr(parsed.action, "items", []) if parsed.ok else [])
+        grounded = sum(1 for s in mentioned if s in known_skus)
         rec = {"t": time.time(), "prompt_tokens": int(ids.shape[1]),
                "gen_tokens": len(tok(text)["input_ids"]),
                "ttft_ms": ttft_ms, "itl_ms": itl_ms,
-               "wall_ms": round((time.time() - t0) * 1000, 1)}
+               "wall_ms": round((time.time() - t0) * 1000, 1),
+               "action_valid": parsed.ok, "truncated": truncated,
+               "ids_mentioned": len(mentioned), "ids_grounded": grounded}
         history.append(rec)
         del history[:-HIST_MAX]
         return {"text": text, **rec}
@@ -122,6 +151,16 @@ def main() -> None:
             # stays a verdict string, never an approximation.
             "prefix_cache": "hardware-gated on Volta (CHALLENGES #26); live "
                             "hit-rate wires up on the H200 leg",
+            # HUD (frozen set): schema validity + grounding, per-turn/rolling.
+            "action_valid_last": history[-1]["action_valid"] if history else None,
+            "action_valid_pct": (round(100 * sum(h["action_valid"]
+                                                 for h in history)
+                                       / len(history), 1) if history else None),
+            "ids_grounded_total": sum(h.get("ids_grounded", 0) for h in history),
+            "ids_ungrounded_total": sum(h.get("ids_mentioned", 0)
+                                        - h.get("ids_grounded", 0)
+                                        for h in history),
+            "rejections_total": rejections["count"],
         }
 
     class Handler(BaseHTTPRequestHandler):
@@ -147,8 +186,22 @@ def main() -> None:
                 return
             try:
                 n = int(self.headers.get("Content-Length", 0))
+                if n > 2_000_000:              # OOM-guard: absurd request size
+                    rejections["count"] += 1
+                    print(f"[serve] REJECTED oversized request ({n} bytes) — "
+                          "engine unaffected, continuing to serve")
+                    self._send(413, {"error": "request too large — rejected "
+                                              "gracefully; engine still up"})
+                    return
                 payload = json.loads(self.rfile.read(n))
-                self._send(200, act(payload["messages"]))
+                msgs = payload["messages"]
+                if len(msgs) > 400:            # OOM-guard: absurd turn count
+                    rejections["count"] += 1
+                    print(f"[serve] REJECTED {len(msgs)}-message request — "
+                          "engine unaffected")
+                    self._send(413, {"error": "too many messages — rejected"})
+                    return
+                self._send(200, act(msgs))
             except Exception as e:  # noqa: BLE001
                 self._send(500, {"error": f"{type(e).__name__}: {e}"})
 
