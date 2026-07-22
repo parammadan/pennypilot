@@ -11,6 +11,11 @@ import urllib.request
 
 from shoprl.data.prompts_v2 import SYSTEM_PROMPT_V2
 
+# Bypass any ambient http(s)_proxy: the policy server is reached over localhost
+# (SSH tunnel) or an internal cluster node — routing those through an egress
+# proxy returns 503. An empty ProxyHandler forces a direct connection.
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 
 class RemotePolicyV2:
     def __init__(self, url: str = "http://localhost:8765",
@@ -21,8 +26,7 @@ class RemotePolicyV2:
         self.messages: list[dict] = []
 
     def health(self) -> dict:
-        with urllib.request.urlopen(f"{self.url}/health",
-                                    timeout=self.timeout) as r:
+        with _OPENER.open(f"{self.url}/health", timeout=self.timeout) as r:
             return json.loads(r.read())
 
     def reset(self, scenario=None, idx=None) -> None:
@@ -34,7 +38,7 @@ class RemotePolicyV2:
             f"{self.url}/act",
             data=json.dumps({"messages": self.messages}).encode(),
             headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+        with _OPENER.open(req, timeout=self.timeout) as r:
             text = json.loads(r.read())["text"]
         self.messages.append({"role": "assistant", "content": text})
         return text
