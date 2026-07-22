@@ -285,15 +285,23 @@ def render_chat_demo_html(catalog, server_url: str = "http://localhost:8765",
       if(new RegExp("\\\\b"+b+"\\\\b").test(text)) c.brand = b;
     return c;
   }
-  function search(){
-    const c = constraints();
+  function filt(cc){
     return PRODUCTS.filter(p=>{
-      if(c.budget && p.price > c.budget) return false;
-      if(c.min_ram && p.ram_gb < c.min_ram) return false;
-      if(c.max_weight && p.weight_lbs > c.max_weight) return false;
-      if(c.brand && String(p.brand).toLowerCase() !== c.brand) return false;
+      if(cc.budget && p.price > cc.budget) return false;
+      if(cc.min_ram && p.ram_gb < cc.min_ram) return false;
+      if(cc.max_weight && p.weight_lbs > cc.max_weight) return false;
+      if(cc.brand && String(p.brand).toLowerCase() !== cc.brand) return false;
       return true;
     }).sort((a,b)=>a.price-b.price);
+  }
+  function search(){                          // progressive relax -> always real hits
+    const c = constraints();
+    let hits = filt(c);
+    if(!hits.length){ const x=Object.assign({},c); delete x.max_weight; hits=filt(x); }
+    if(!hits.length){ const x=Object.assign({},c); delete x.max_weight; delete x.brand; hits=filt(x); }
+    if(!hits.length){ hits = filt({min_ram:c.min_ram}); }   // keep RAM, drop budget
+    if(!hits.length){ hits = PRODUCTS.slice().sort((a,b)=>a.price-b.price); }
+    return hits;
   }
   function resultsText(hits){
     if(!hits.length) return "No matching products found.";
@@ -346,6 +354,7 @@ def render_chat_demo_html(catalog, server_url: str = "http://localhost:8765",
       if(act.product_id) pennymart.select(act.product_id);
     } else if(act.action==="request_cart_permission"){
       pendingItems = act.items || [];
+      if(pendingItems[0]) pennymart.select(pendingItems[0]);   // highlight it in the grid
       pennymart.permission(pendingItems, act.estimated_total==null?"":act.estimated_total,
                            null, null);
     } else if(act.action==="add_to_cart"){

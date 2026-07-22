@@ -1,0 +1,328 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>PennyMart — live assistant</title><style>
+  :root { --nav:#131921; --nav2:#232f3e; --link:#007185; --price:#0f1111;
+          --star:#de7921; --btn:#ffd814; --btn2:#f7ca00; --ink:#0f1111;
+          --muted:#565959; --bg:#eaeded; --ok:#067d62; }
+  * { box-sizing:border-box; margin:0; }
+  body { font:13px/1.4 "Amazon Ember",Arial,-apple-system,system-ui,sans-serif;
+         color:var(--ink); background:var(--bg);
+         display:grid; grid-template-columns:340px 1fr; height:100vh; }
+  #chat { background:#fff; border-right:1px solid #d5d9d9; padding:14px;
+          overflow-y:auto; display:flex; flex-direction:column; }
+  #msgs { flex:1; overflow-y:auto; }
+  #saybar { display:flex; gap:6px; padding-top:10px; border-top:1px solid #d5d9d9; }
+  #say { flex:1; padding:9px 11px; border:1px solid #888c8c; border-radius:8px;
+         font-size:13px; }
+  #send { padding:9px 14px; border:1px solid #a88734; border-radius:8px;
+          background:var(--btn); color:#0f1111; font-weight:600; cursor:pointer; }
+  #chat h2 { font-size:13px; color:var(--muted); text-transform:uppercase;
+             letter-spacing:.06em; margin-bottom:10px; }
+  .bubble { max-width:92%; padding:8px 11px; border-radius:12px; margin:6px 0;
+            white-space:pre-wrap; word-break:break-word; font-size:13px; }
+  .user { background:#f0f2f2; }
+  .agent { background:#eef6ff; border:1px solid #cde5ff; margin-left:auto;
+           font-family:ui-monospace,Menlo,monospace; font-size:11.5px; }
+  .note { color:var(--muted); font-size:11px; margin:2px 0 8px; }
+  #store { display:flex; flex-direction:column; overflow:hidden; background:var(--bg); }
+  header { background:var(--nav); display:flex; align-items:center; gap:14px;
+           padding:8px 16px; }
+  header .logo { color:#fff; font-size:20px; font-weight:800; letter-spacing:-.5px; }
+  header .logo em { color:#ff9900; font-style:normal; }
+  #search { flex:1; display:flex; height:38px; border-radius:6px; overflow:hidden; }
+  #search input { flex:1; border:0; padding:0 12px; font-size:14px; }
+  #search .go { width:44px; background:var(--btn2); display:flex; align-items:center;
+                justify-content:center; font-size:16px; }
+  header .cart { color:#fff; font-weight:700; font-size:13px; white-space:nowrap; }
+  header .cart b { color:#f90; font-size:16px; }
+  #subnav { background:var(--nav2); color:#fff; font-size:12px; padding:6px 16px;
+            display:flex; gap:14px; align-items:center; }
+  #subnav .sim { color:#febd69; }
+  #resultbar { padding:10px 18px 4px; color:var(--muted); font-size:13px; }
+  #resultbar b { color:var(--ink); }
+  #hintbar { display:none; margin:8px 16px 0; padding:7px 12px; font-size:12px;
+             background:#fff8e5; border:1px dashed #e0c86a; border-radius:6px;
+             color:#6a5a1a; }
+  #hintbar b { color:#4a3f10; }
+  #grid { padding:6px 12px 16px; overflow-y:auto; }
+  #empty { display:flex; flex-direction:column; align-items:center;
+           justify-content:center; height:70%; color:var(--muted); gap:10px;
+           text-align:center; padding:40px; }
+  #empty .big { font-size:38px; } #empty h2 { font-size:17px; color:var(--ink);
+           font-weight:600; } #empty p { max-width:420px; }
+  .card { background:#fff; border-bottom:1px solid #e7e7e7; padding:16px;
+          display:grid; grid-template-columns:200px 1fr; gap:18px; }
+  .card .thumb { height:170px; display:flex; align-items:center; justify-content:center;
+                 background:#fff; position:relative; }
+  .card .thumb svg { width:160px; height:110px; }
+  .card .info { display:flex; flex-direction:column; gap:4px; }
+  .card.hit { background:#fff; }
+  .card.selected { background:#fffbea; outline:2px solid #ffd814; }
+  .card h3 { font-size:18px; font-weight:500; color:var(--link); line-height:1.3; }
+  .card .rateline { display:flex; align-items:center; gap:6px; }
+  .card .rateline .st { color:var(--star); font-size:14px; letter-spacing:1px; }
+  .card .rateline .n { color:var(--link); font-size:12px; }
+  .card .price { color:var(--price); margin:2px 0; }
+  .card .price .cur { font-size:13px; vertical-align:top; }
+  .card .price .whole { font-size:26px; font-weight:500; }
+  .card .price .frac { font-size:13px; vertical-align:top; }
+  .card .specs { color:var(--muted); font-size:13px; }
+  .card .deliv { font-size:12px; color:var(--ink); }
+  .card .deliv b { font-weight:700; }
+  .card .stock { color:var(--ok); font-size:13px; margin-top:2px; }
+  .card .buy { margin-top:8px; width:150px; text-align:center; padding:8px;
+               background:var(--btn); border:1px solid #a88734; border-radius:999px;
+               font-size:13px; color:#0f1111; }
+  .card.selected .buy { background:#ffa41c; border-color:#ff8f00; font-weight:600; }
+  .badge-best { display:inline-block; background:#232f3e; color:#fff; font-size:11px;
+                font-weight:700; padding:2px 8px; border-radius:3px; width:fit-content; }
+  .badge-best em { color:#ff9900; font-style:normal; }
+  #banner { display:none; padding:10px 18px; background:#e3f0e3;
+            color:#067d62; font-weight:600; border-bottom:1px solid #067d62; }
+  #modal { display:none; position:fixed; inset:0; background:rgba(15,17,17,.5);
+           align-items:center; justify-content:center; }
+  #modal .box { background:#fff; border-radius:10px; padding:22px; width:440px; }
+  #modal h3 { margin-bottom:10px; font-size:18px; }
+  #modal ul { margin:8px 0 8px 18px; } #modal .savings { color:#067d62; font-weight:700; }
+  #modal .reply { margin-top:10px; font-style:italic; color:var(--muted); }
+  #modal .actions { margin-top:16px; display:flex; gap:8px; justify-content:flex-end; }
+  #modal button { padding:9px 18px; border-radius:999px; border:1px solid #888c8c;
+                  background:#fff; font-weight:600; cursor:pointer; }
+  #modal button.approve { background:var(--btn); border-color:#a88734; }
+</style></head><body>
+<aside id="chat"><h2>Assistant</h2><div id="msgs"></div>
+  <div id="saybar"><input id="say" placeholder="…" autocomplete="off">
+  <button id="send">Send</button></div></aside>
+<main id="store">
+  <header><span class="logo">Penny<em>Mart</em></span>
+    <div id="search"><input placeholder="Search PennyMart"><div class="go">🔍</div></div>
+    <span class="cart">🛒 Cart <b id="cartn">0</b></span></header>
+  <div id="subnav"><span>All</span><span>Laptops</span><span>Deals</span>
+    <span class="sim">● SIMULATED — no real purchases, stylized images</span></div>
+  <div id="banner"></div>
+  <div id="hintbar"></div>
+  <div id="resultbar"></div>
+  <div id="grid"></div>
+</main>
+<div id="modal"><div class="box"><h3>Add to your cart?</h3>
+  <div id="modal-body"></div><div class="reply" id="modal-reply"></div>
+  <div class="actions"><button id="hold">Not now</button>
+  <button class="approve" id="approve">Add to Cart</button></div></div></div>
+<script>
+const PRODUCTS = [{"sku": "LAP-0001", "name": "Asus ZenSlim 13\"", "price": 1265.86, "ram_gb": 16, "weight_lbs": 3.6, "battery_hrs": 16, "brand": "Asus"}, {"sku": "LAP-0002", "name": "Dell ZenSlim 15\"", "price": 961.28, "ram_gb": 16, "weight_lbs": 3.9, "battery_hrs": 4, "brand": "Dell"}, {"sku": "LAP-0003", "name": "Lenovo PowerLine 15\"", "price": 747.5, "ram_gb": 8, "weight_lbs": 5.3, "battery_hrs": 7, "brand": "Lenovo"}, {"sku": "LAP-0004", "name": "Lenovo ZenSlim 13\"", "price": 685.21, "ram_gb": 8, "weight_lbs": 6.0, "battery_hrs": 13, "brand": "Lenovo"}, {"sku": "LAP-0005", "name": "Apple PowerLine 13\"", "price": 918.91, "ram_gb": 8, "weight_lbs": 5.8, "battery_hrs": 16, "brand": "Apple"}, {"sku": "LAP-0006", "name": "Apple AeroLite 13\"", "price": 2224.67, "ram_gb": 64, "weight_lbs": 3.5, "battery_hrs": 16, "brand": "Apple"}, {"sku": "LAP-0007", "name": "Razer ZenSlim 13\"", "price": 1089.49, "ram_gb": 16, "weight_lbs": 5.4, "battery_hrs": 16, "brand": "Razer"}, {"sku": "LAP-0008", "name": "Framework ZenSlim 13\"", "price": 741.45, "ram_gb": 8, "weight_lbs": 5.8, "battery_hrs": 9, "brand": "Framework"}, {"sku": "LAP-0009", "name": "Apple ZenSlim 15\"", "price": 1177.05, "ram_gb": 16, "weight_lbs": 3.0, "battery_hrs": 5, "brand": "Apple"}, {"sku": "LAP-0010", "name": "Framework PowerLine 13\"", "price": 1004.53, "ram_gb": 16, "weight_lbs": 5.1, "battery_hrs": 9, "brand": "Framework"}, {"sku": "LAP-0011", "name": "Razer AeroLite 15\"", "price": 990.63, "ram_gb": 8, "weight_lbs": 2.7, "battery_hrs": 12, "brand": "Razer"}, {"sku": "LAP-0012", "name": "Framework ZenSlim 14\"", "price": 1985.46, "ram_gb": 64, "weight_lbs": 5.7, "battery_hrs": 10, "brand": "Framework"}, {"sku": "LAP-0013", "name": "Apple PowerLine 14\"", "price": 2097.78, "ram_gb": 64, "weight_lbs": 6.0, "battery_hrs": 19, "brand": "Apple"}, {"sku": "LAP-0014", "name": "Lenovo NoteMax 14\"", "price": 796.29, "ram_gb": 8, "weight_lbs": 3.2, "battery_hrs": 6, "brand": "Lenovo"}, {"sku": "LAP-0015", "name": "Framework ZenSlim 16\"", "price": 2247.34, "ram_gb": 64, "weight_lbs": 4.5, "battery_hrs": 17, "brand": "Framework"}, {"sku": "LAP-0016", "name": "Dell NoteMax 14\"", "price": 1496.33, "ram_gb": 32, "weight_lbs": 2.8, "battery_hrs": 7, "brand": "Dell"}, {"sku": "LAP-0017", "name": "Acer ProBook 13\"", "price": 1073.44, "ram_gb": 16, "weight_lbs": 4.6, "battery_hrs": 11, "brand": "Acer"}, {"sku": "LAP-0018", "name": "Asus UltraBook 16\"", "price": 2298.64, "ram_gb": 64, "weight_lbs": 4.0, "battery_hrs": 20, "brand": "Asus"}, {"sku": "LAP-0019", "name": "Apple PowerLine 13\"", "price": 1206.39, "ram_gb": 32, "weight_lbs": 4.9, "battery_hrs": 8, "brand": "Apple"}, {"sku": "LAP-0020", "name": "Asus ProBook 15\"", "price": 2163.24, "ram_gb": 64, "weight_lbs": 4.9, "battery_hrs": 19, "brand": "Asus"}, {"sku": "LAP-0021", "name": "HP UltraBook 16\"", "price": 2057.21, "ram_gb": 64, "weight_lbs": 5.3, "battery_hrs": 19, "brand": "HP"}, {"sku": "LAP-0022", "name": "Acer PowerLine 16\"", "price": 1415.0, "ram_gb": 32, "weight_lbs": 4.5, "battery_hrs": 18, "brand": "Acer"}, {"sku": "LAP-0023", "name": "Lenovo NoteMax 13\"", "price": 1352.21, "ram_gb": 16, "weight_lbs": 3.4, "battery_hrs": 20, "brand": "Lenovo"}, {"sku": "LAP-0024", "name": "Framework ProBook 15\"", "price": 2301.89, "ram_gb": 64, "weight_lbs": 2.6, "battery_hrs": 18, "brand": "Framework"}, {"sku": "LAP-0025", "name": "Framework NoteMax 14\"", "price": 1023.19, "ram_gb": 16, "weight_lbs": 5.2, "battery_hrs": 11, "brand": "Framework"}, {"sku": "LAP-0026", "name": "Framework ProBook 15\"", "price": 1050.86, "ram_gb": 8, "weight_lbs": 3.7, "battery_hrs": 15, "brand": "Framework"}, {"sku": "LAP-0027", "name": "Acer PowerLine 15\"", "price": 2113.4, "ram_gb": 64, "weight_lbs": 2.9, "battery_hrs": 10, "brand": "Acer"}, {"sku": "LAP-0028", "name": "Framework ProBook 13\"", "price": 1120.33, "ram_gb": 8, "weight_lbs": 2.3, "battery_hrs": 10, "brand": "Framework"}, {"sku": "LAP-0029", "name": "Lenovo NoteMax 14\"", "price": 1316.59, "ram_gb": 32, "weight_lbs": 5.1, "battery_hrs": 5, "brand": "Lenovo"}, {"sku": "LAP-0030", "name": "Dell ZenSlim 14\"", "price": 2099.24, "ram_gb": 64, "weight_lbs": 4.1, "battery_hrs": 7, "brand": "Dell"}, {"sku": "LAP-0031", "name": "Framework UltraBook 13\"", "price": 1363.21, "ram_gb": 32, "weight_lbs": 4.9, "battery_hrs": 9, "brand": "Framework"}, {"sku": "LAP-0032", "name": "Asus ZenSlim 15\"", "price": 1257.74, "ram_gb": 32, "weight_lbs": 4.9, "battery_hrs": 12, "brand": "Asus"}, {"sku": "LAP-0033", "name": "Framework NoteMax 13\"", "price": 1997.82, "ram_gb": 64, "weight_lbs": 3.9, "battery_hrs": 5, "brand": "Framework"}, {"sku": "LAP-0034", "name": "Framework UltraBook 15\"", "price": 1390.78, "ram_gb": 32, "weight_lbs": 4.9, "battery_hrs": 16, "brand": "Framework"}, {"sku": "LAP-0035", "name": "Asus ProBook 15\"", "price": 1044.35, "ram_gb": 16, "weight_lbs": 3.5, "battery_hrs": 5, "brand": "Asus"}, {"sku": "LAP-0036", "name": "Apple PowerLine 14\"", "price": 1060.03, "ram_gb": 16, "weight_lbs": 2.9, "battery_hrs": 6, "brand": "Apple"}, {"sku": "LAP-0037", "name": "Acer PowerLine 14\"", "price": 1247.86, "ram_gb": 32, "weight_lbs": 5.7, "battery_hrs": 12, "brand": "Acer"}, {"sku": "LAP-0038", "name": "Dell PowerLine 16\"", "price": 1338.92, "ram_gb": 16, "weight_lbs": 2.2, "battery_hrs": 12, "brand": "Dell"}, {"sku": "LAP-0039", "name": "Acer PowerLine 13\"", "price": 1066.81, "ram_gb": 16, "weight_lbs": 4.3, "battery_hrs": 15, "brand": "Acer"}, {"sku": "LAP-0040", "name": "Asus PowerLine 16\"", "price": 1548.78, "ram_gb": 32, "weight_lbs": 4.8, "battery_hrs": 15, "brand": "Asus"}, {"sku": "LAP-0041", "name": "Asus ZenSlim 16\"", "price": 1002.68, "ram_gb": 16, "weight_lbs": 4.2, "battery_hrs": 13, "brand": "Asus"}, {"sku": "LAP-0042", "name": "Framework AeroLite 14\"", "price": 1131.23, "ram_gb": 8, "weight_lbs": 3.0, "battery_hrs": 17, "brand": "Framework"}, {"sku": "LAP-0043", "name": "Asus AeroLite 15\"", "price": 1645.91, "ram_gb": 32, "weight_lbs": 3.5, "battery_hrs": 19, "brand": "Asus"}, {"sku": "LAP-0044", "name": "HP ProBook 16\"", "price": 2205.65, "ram_gb": 64, "weight_lbs": 2.6, "battery_hrs": 4, "brand": "HP"}, {"sku": "LAP-0045", "name": "HP UltraBook 15\"", "price": 1039.14, "ram_gb": 8, "weight_lbs": 3.2, "battery_hrs": 10, "brand": "HP"}, {"sku": "LAP-0046", "name": "Dell ProBook 16\"", "price": 1441.42, "ram_gb": 32, "weight_lbs": 5.4, "battery_hrs": 18, "brand": "Dell"}, {"sku": "LAP-0047", "name": "Dell ZenSlim 13\"", "price": 1443.5, "ram_gb": 32, "weight_lbs": 4.3, "battery_hrs": 16, "brand": "Dell"}, {"sku": "LAP-0048", "name": "Apple NoteMax 15\"", "price": 1318.83, "ram_gb": 32, "weight_lbs": 4.2, "battery_hrs": 12, "brand": "Apple"}, {"sku": "LAP-0049", "name": "Apple ProBook 16\"", "price": 1430.09, "ram_gb": 32, "weight_lbs": 2.1, "battery_hrs": 6, "brand": "Apple"}, {"sku": "LAP-0050", "name": "Framework ProBook 14\"", "price": 1067.35, "ram_gb": 16, "weight_lbs": 2.3, "battery_hrs": 8, "brand": "Framework"}, {"sku": "LAP-0051", "name": "HP ZenSlim 16\"", "price": 1145.59, "ram_gb": 8, "weight_lbs": 3.7, "battery_hrs": 18, "brand": "HP"}, {"sku": "LAP-0052", "name": "Dell NoteMax 16\"", "price": 1118.0, "ram_gb": 16, "weight_lbs": 3.0, "battery_hrs": 4, "brand": "Dell"}, {"sku": "LAP-0053", "name": "HP UltraBook 16\"", "price": 1144.77, "ram_gb": 8, "weight_lbs": 3.2, "battery_hrs": 16, "brand": "HP"}, {"sku": "LAP-0054", "name": "Lenovo ZenSlim 13\"", "price": 2079.72, "ram_gb": 64, "weight_lbs": 3.6, "battery_hrs": 7, "brand": "Lenovo"}, {"sku": "LAP-0055", "name": "Lenovo UltraBook 16\"", "price": 2296.74, "ram_gb": 64, "weight_lbs": 4.7, "battery_hrs": 19, "brand": "Lenovo"}, {"sku": "LAP-0056", "name": "Framework AeroLite 14\"", "price": 2025.01, "ram_gb": 64, "weight_lbs": 5.5, "battery_hrs": 7, "brand": "Framework"}, {"sku": "LAP-0057", "name": "Asus PowerLine 14\"", "price": 2247.93, "ram_gb": 64, "weight_lbs": 4.4, "battery_hrs": 14, "brand": "Asus"}, {"sku": "LAP-0058", "name": "Razer ProBook 15\"", "price": 991.53, "ram_gb": 16, "weight_lbs": 5.5, "battery_hrs": 15, "brand": "Razer"}, {"sku": "LAP-0059", "name": "Asus UltraBook 13\"", "price": 1277.5, "ram_gb": 16, "weight_lbs": 3.4, "battery_hrs": 19, "brand": "Asus"}, {"sku": "LAP-0060", "name": "Lenovo AeroLite 16\"", "price": 845.79, "ram_gb": 8, "weight_lbs": 6.0, "battery_hrs": 19, "brand": "Lenovo"}, {"sku": "LAP-0061", "name": "Asus NoteMax 14\"", "price": 1448.46, "ram_gb": 32, "weight_lbs": 4.4, "battery_hrs": 19, "brand": "Asus"}, {"sku": "LAP-0062", "name": "Dell PowerLine 13\"", "price": 981.02, "ram_gb": 8, "weight_lbs": 3.2, "battery_hrs": 7, "brand": "Dell"}, {"sku": "LAP-0063", "name": "HP NoteMax 15\"", "price": 1307.08, "ram_gb": 16, "weight_lbs": 2.2, "battery_hrs": 17, "brand": "HP"}, {"sku": "LAP-0064", "name": "HP ProBook 16\"", "price": 1539.71, "ram_gb": 32, "weight_lbs": 2.4, "battery_hrs": 15, "brand": "HP"}, {"sku": "LAP-0065", "name": "Razer NoteMax 15\"", "price": 1046.26, "ram_gb": 16, "weight_lbs": 3.4, "battery_hrs": 5, "brand": "Razer"}, {"sku": "LAP-0066", "name": "Asus AeroLite 13\"", "price": 1114.79, "ram_gb": 8, "weight_lbs": 4.2, "battery_hrs": 20, "brand": "Asus"}, {"sku": "LAP-0067", "name": "HP NoteMax 14\"", "price": 2134.62, "ram_gb": 64, "weight_lbs": 3.8, "battery_hrs": 6, "brand": "HP"}, {"sku": "LAP-0068", "name": "Asus UltraBook 16\"", "price": 1241.21, "ram_gb": 16, "weight_lbs": 3.5, "battery_hrs": 16, "brand": "Asus"}, {"sku": "LAP-0069", "name": "Razer AeroLite 16\"", "price": 885.5, "ram_gb": 8, "weight_lbs": 4.0, "battery_hrs": 13, "brand": "Razer"}, {"sku": "LAP-0070", "name": "Acer NoteMax 16\"", "price": 805.42, "ram_gb": 16, "weight_lbs": 5.8, "battery_hrs": 9, "brand": "Acer"}, {"sku": "LAP-0071", "name": "Apple PowerLine 16\"", "price": 2169.15, "ram_gb": 64, "weight_lbs": 4.2, "battery_hrs": 19, "brand": "Apple"}, {"sku": "LAP-0072", "name": "Razer ZenSlim 16\"", "price": 1513.64, "ram_gb": 32, "weight_lbs": 2.3, "battery_hrs": 10, "brand": "Razer"}, {"sku": "LAP-0073", "name": "Asus UltraBook 16\"", "price": 1252.36, "ram_gb": 16, "weight_lbs": 4.5, "battery_hrs": 18, "brand": "Asus"}, {"sku": "LAP-0074", "name": "Dell NoteMax 15\"", "price": 1158.94, "ram_gb": 16, "weight_lbs": 4.8, "battery_hrs": 18, "brand": "Dell"}, {"sku": "LAP-0075", "name": "HP PowerLine 14\"", "price": 845.17, "ram_gb": 8, "weight_lbs": 3.6, "battery_hrs": 10, "brand": "HP"}, {"sku": "LAP-0076", "name": "Asus PowerLine 16\"", "price": 824.87, "ram_gb": 8, "weight_lbs": 4.8, "battery_hrs": 4, "brand": "Asus"}, {"sku": "LAP-0077", "name": "Framework ProBook 16\"", "price": 1237.78, "ram_gb": 16, "weight_lbs": 3.3, "battery_hrs": 20, "brand": "Framework"}, {"sku": "LAP-0078", "name": "HP AeroLite 15\"", "price": 2187.19, "ram_gb": 64, "weight_lbs": 4.9, "battery_hrs": 14, "brand": "HP"}, {"sku": "LAP-0079", "name": "Apple NoteMax 15\"", "price": 1058.55, "ram_gb": 8, "weight_lbs": 2.8, "battery_hrs": 15, "brand": "Apple"}, {"sku": "LAP-0080", "name": "Razer ZenSlim 13\"", "price": 1006.67, "ram_gb": 16, "weight_lbs": 5.5, "battery_hrs": 11, "brand": "Razer"}, {"sku": "LAP-0081", "name": "Lenovo ProBook 14\"", "price": 1488.37, "ram_gb": 32, "weight_lbs": 3.4, "battery_hrs": 8, "brand": "Lenovo"}, {"sku": "LAP-0082", "name": "HP ZenSlim 13\"", "price": 887.96, "ram_gb": 8, "weight_lbs": 4.9, "battery_hrs": 9, "brand": "HP"}, {"sku": "LAP-0083", "name": "HP ZenSlim 14\"", "price": 962.53, "ram_gb": 16, "weight_lbs": 5.5, "battery_hrs": 9, "brand": "HP"}, {"sku": "LAP-0084", "name": "Framework PowerLine 13\"", "price": 1455.54, "ram_gb": 32, "weight_lbs": 3.7, "battery_hrs": 11, "brand": "Framework"}, {"sku": "LAP-0085", "name": "Dell PowerLine 13\"", "price": 1356.95, "ram_gb": 32, "weight_lbs": 4.1, "battery_hrs": 5, "brand": "Dell"}, {"sku": "LAP-0086", "name": "Acer UltraBook 16\"", "price": 1586.91, "ram_gb": 32, "weight_lbs": 4.8, "battery_hrs": 20, "brand": "Acer"}, {"sku": "LAP-0087", "name": "Apple AeroLite 14\"", "price": 1100.85, "ram_gb": 16, "weight_lbs": 6.0, "battery_hrs": 17, "brand": "Apple"}, {"sku": "LAP-0088", "name": "Acer NoteMax 16\"", "price": 873.6, "ram_gb": 16, "weight_lbs": 5.1, "battery_hrs": 10, "brand": "Acer"}, {"sku": "LAP-0089", "name": "Acer AeroLite 16\"", "price": 2050.64, "ram_gb": 64, "weight_lbs": 3.7, "battery_hrs": 8, "brand": "Acer"}, {"sku": "LAP-0090", "name": "Dell UltraBook 14\"", "price": 2239.66, "ram_gb": 64, "weight_lbs": 3.5, "battery_hrs": 11, "brand": "Dell"}, {"sku": "LAP-0091", "name": "Acer UltraBook 13\"", "price": 1974.96, "ram_gb": 64, "weight_lbs": 4.4, "battery_hrs": 8, "brand": "Acer"}, {"sku": "LAP-0092", "name": "HP AeroLite 14\"", "price": 952.25, "ram_gb": 8, "weight_lbs": 2.7, "battery_hrs": 11, "brand": "HP"}, {"sku": "LAP-0093", "name": "Asus ZenSlim 13\"", "price": 2307.58, "ram_gb": 64, "weight_lbs": 3.2, "battery_hrs": 11, "brand": "Asus"}, {"sku": "LAP-0094", "name": "Lenovo AeroLite 15\"", "price": 1982.3, "ram_gb": 64, "weight_lbs": 4.4, "battery_hrs": 7, "brand": "Lenovo"}, {"sku": "LAP-0095", "name": "Asus ZenSlim 16\"", "price": 856.88, "ram_gb": 16, "weight_lbs": 4.1, "battery_hrs": 5, "brand": "Asus"}, {"sku": "LAP-0096", "name": "HP UltraBook 13\"", "price": 1370.4, "ram_gb": 16, "weight_lbs": 2.7, "battery_hrs": 18, "brand": "HP"}, {"sku": "LAP-0097", "name": "Dell PowerLine 16\"", "price": 2208.34, "ram_gb": 64, "weight_lbs": 2.7, "battery_hrs": 9, "brand": "Dell"}, {"sku": "LAP-0098", "name": "Framework AeroLite 15\"", "price": 1264.27, "ram_gb": 32, "weight_lbs": 5.9, "battery_hrs": 16, "brand": "Framework"}, {"sku": "LAP-0099", "name": "HP PowerLine 16\"", "price": 2186.58, "ram_gb": 64, "weight_lbs": 2.4, "battery_hrs": 5, "brand": "HP"}, {"sku": "LAP-0100", "name": "HP ProBook 13\"", "price": 975.15, "ram_gb": 8, "weight_lbs": 5.8, "battery_hrs": 18, "brand": "HP"}, {"sku": "LAP-0101", "name": "Lenovo ZenSlim 14\"", "price": 1167.96, "ram_gb": 16, "weight_lbs": 2.6, "battery_hrs": 12, "brand": "Lenovo"}, {"sku": "LAP-0102", "name": "Acer ZenSlim 15\"", "price": 2208.23, "ram_gb": 64, "weight_lbs": 3.6, "battery_hrs": 10, "brand": "Acer"}, {"sku": "LAP-0103", "name": "Asus PowerLine 15\"", "price": 1589.74, "ram_gb": 32, "weight_lbs": 2.4, "battery_hrs": 18, "brand": "Asus"}, {"sku": "LAP-0104", "name": "Razer NoteMax 13\"", "price": 1336.8, "ram_gb": 32, "weight_lbs": 5.0, "battery_hrs": 15, "brand": "Razer"}, {"sku": "LAP-0105", "name": "Dell PowerLine 16\"", "price": 1147.07, "ram_gb": 16, "weight_lbs": 3.8, "battery_hrs": 19, "brand": "Dell"}, {"sku": "LAP-0106", "name": "Asus PowerLine 14\"", "price": 1175.2, "ram_gb": 16, "weight_lbs": 3.7, "battery_hrs": 12, "brand": "Asus"}, {"sku": "LAP-0107", "name": "Acer ZenSlim 14\"", "price": 1590.93, "ram_gb": 32, "weight_lbs": 3.5, "battery_hrs": 18, "brand": "Acer"}, {"sku": "LAP-0108", "name": "Dell NoteMax 13\"", "price": 1655.41, "ram_gb": 32, "weight_lbs": 2.9, "battery_hrs": 15, "brand": "Dell"}, {"sku": "LAP-0109", "name": "Apple AeroLite 13\"", "price": 1910.94, "ram_gb": 64, "weight_lbs": 5.7, "battery_hrs": 5, "brand": "Apple"}, {"sku": "LAP-0110", "name": "Apple ProBook 13\"", "price": 1047.01, "ram_gb": 16, "weight_lbs": 2.9, "battery_hrs": 10, "brand": "Apple"}, {"sku": "LAP-0111", "name": "Lenovo UltraBook 15\"", "price": 2105.52, "ram_gb": 64, "weight_lbs": 5.1, "battery_hrs": 17, "brand": "Lenovo"}, {"sku": "LAP-0112", "name": "Acer PowerLine 15\"", "price": 1301.51, "ram_gb": 32, "weight_lbs": 4.7, "battery_hrs": 8, "brand": "Acer"}, {"sku": "LAP-0113", "name": "Razer UltraBook 13\"", "price": 1046.6, "ram_gb": 8, "weight_lbs": 3.5, "battery_hrs": 12, "brand": "Razer"}, {"sku": "LAP-0114", "name": "HP ProBook 16\"", "price": 935.55, "ram_gb": 16, "weight_lbs": 3.7, "battery_hrs": 4, "brand": "HP"}, {"sku": "LAP-0115", "name": "HP ProBook 14\"", "price": 1557.82, "ram_gb": 32, "weight_lbs": 2.3, "battery_hrs": 9, "brand": "HP"}, {"sku": "LAP-0116", "name": "Apple ZenSlim 14\"", "price": 2397.9, "ram_gb": 64, "weight_lbs": 3.3, "battery_hrs": 19, "brand": "Apple"}, {"sku": "LAP-0117", "name": "Framework ZenSlim 13\"", "price": 1248.13, "ram_gb": 16, "weight_lbs": 2.8, "battery_hrs": 8, "brand": "Framework"}, {"sku": "LAP-0118", "name": "Asus AeroLite 13\"", "price": 856.01, "ram_gb": 8, "weight_lbs": 3.2, "battery_hrs": 4, "brand": "Asus"}, {"sku": "LAP-0119", "name": "Dell AeroLite 15\"", "price": 2080.47, "ram_gb": 64, "weight_lbs": 2.4, "battery_hrs": 5, "brand": "Dell"}, {"sku": "LAP-0120", "name": "Framework AeroLite 13\"", "price": 1912.41, "ram_gb": 64, "weight_lbs": 4.8, "battery_hrs": 5, "brand": "Framework"}, {"sku": "LAP-0121", "name": "Acer NoteMax 16\"", "price": 2226.08, "ram_gb": 64, "weight_lbs": 3.0, "battery_hrs": 7, "brand": "Acer"}, {"sku": "LAP-0122", "name": "Acer NoteMax 13\"", "price": 1360.09, "ram_gb": 32, "weight_lbs": 5.3, "battery_hrs": 13, "brand": "Acer"}, {"sku": "LAP-0123", "name": "Razer PowerLine 15\"", "price": 2216.48, "ram_gb": 64, "weight_lbs": 3.5, "battery_hrs": 19, "brand": "Razer"}, {"sku": "LAP-0124", "name": "HP AeroLite 14\"", "price": 1338.5, "ram_gb": 32, "weight_lbs": 5.1, "battery_hrs": 10, "brand": "HP"}, {"sku": "LAP-0125", "name": "Asus NoteMax 16\"", "price": 903.5, "ram_gb": 8, "weight_lbs": 5.0, "battery_hrs": 18, "brand": "Asus"}, {"sku": "LAP-0126", "name": "Acer NoteMax 13\"", "price": 1232.47, "ram_gb": 16, "weight_lbs": 3.8, "battery_hrs": 15, "brand": "Acer"}, {"sku": "LAP-0127", "name": "Acer PowerLine 15\"", "price": 1305.97, "ram_gb": 16, "weight_lbs": 2.6, "battery_hrs": 17, "brand": "Acer"}, {"sku": "LAP-0128", "name": "Asus ZenSlim 14\"", "price": 2291.71, "ram_gb": 64, "weight_lbs": 3.4, "battery_hrs": 13, "brand": "Asus"}, {"sku": "LAP-0129", "name": "Apple ZenSlim 13\"", "price": 1305.85, "ram_gb": 16, "weight_lbs": 2.6, "battery_hrs": 11, "brand": "Apple"}, {"sku": "LAP-0130", "name": "Lenovo UltraBook 14\"", "price": 1687.56, "ram_gb": 32, "weight_lbs": 2.6, "battery_hrs": 15, "brand": "Lenovo"}, {"sku": "LAP-0131", "name": "HP NoteMax 16\"", "price": 1205.56, "ram_gb": 16, "weight_lbs": 3.0, "battery_hrs": 15, "brand": "HP"}, {"sku": "LAP-0132", "name": "Asus ProBook 15\"", "price": 2210.17, "ram_gb": 64, "weight_lbs": 2.5, "battery_hrs": 5, "brand": "Asus"}, {"sku": "LAP-0133", "name": "Apple ZenSlim 16\"", "price": 1128.32, "ram_gb": 8, "weight_lbs": 2.8, "battery_hrs": 17, "brand": "Apple"}, {"sku": "LAP-0134", "name": "Razer PowerLine 13\"", "price": 1355.54, "ram_gb": 32, "weight_lbs": 5.2, "battery_hrs": 14, "brand": "Razer"}, {"sku": "LAP-0135", "name": "HP PowerLine 14\"", "price": 2130.19, "ram_gb": 64, "weight_lbs": 3.1, "battery_hrs": 10, "brand": "HP"}, {"sku": "LAP-0136", "name": "Acer AeroLite 15\"", "price": 1058.38, "ram_gb": 8, "weight_lbs": 2.8, "battery_hrs": 15, "brand": "Acer"}, {"sku": "LAP-0137", "name": "Lenovo NoteMax 15\"", "price": 2241.75, "ram_gb": 64, "weight_lbs": 2.4, "battery_hrs": 5, "brand": "Lenovo"}, {"sku": "LAP-0138", "name": "Apple AeroLite 16\"", "price": 995.09, "ram_gb": 8, "weight_lbs": 4.7, "battery_hrs": 20, "brand": "Apple"}, {"sku": "LAP-0139", "name": "HP UltraBook 13\"", "price": 1340.31, "ram_gb": 32, "weight_lbs": 4.6, "battery_hrs": 8, "brand": "HP"}, {"sku": "LAP-0140", "name": "Razer AeroLite 13\"", "price": 1277.55, "ram_gb": 32, "weight_lbs": 5.2, "battery_hrs": 14, "brand": "Razer"}, {"sku": "LAP-0141", "name": "Asus ProBook 13\"", "price": 681.66, "ram_gb": 8, "weight_lbs": 5.1, "battery_hrs": 9, "brand": "Asus"}, {"sku": "LAP-0142", "name": "Apple AeroLite 13\"", "price": 1096.24, "ram_gb": 8, "weight_lbs": 3.1, "battery_hrs": 15, "brand": "Apple"}, {"sku": "LAP-0143", "name": "Dell AeroLite 14\"", "price": 1421.35, "ram_gb": 32, "weight_lbs": 2.2, "battery_hrs": 5, "brand": "Dell"}, {"sku": "LAP-0144", "name": "Razer NoteMax 16\"", "price": 843.07, "ram_gb": 8, "weight_lbs": 5.0, "battery_hrs": 15, "brand": "Razer"}, {"sku": "LAP-0145", "name": "Dell ProBook 14\"", "price": 765.09, "ram_gb": 8, "weight_lbs": 5.3, "battery_hrs": 6, "brand": "Dell"}, {"sku": "LAP-0146", "name": "Apple AeroLite 13\"", "price": 2060.69, "ram_gb": 64, "weight_lbs": 5.1, "battery_hrs": 8, "brand": "Apple"}, {"sku": "LAP-0147", "name": "Dell ProBook 15\"", "price": 2090.31, "ram_gb": 64, "weight_lbs": 4.8, "battery_hrs": 13, "brand": "Dell"}, {"sku": "LAP-0148", "name": "Dell UltraBook 14\"", "price": 1249.62, "ram_gb": 16, "weight_lbs": 2.7, "battery_hrs": 10, "brand": "Dell"}, {"sku": "LAP-0149", "name": "Framework UltraBook 15\"", "price": 1319.83, "ram_gb": 32, "weight_lbs": 4.8, "battery_hrs": 14, "brand": "Framework"}, {"sku": "LAP-0150", "name": "HP NoteMax 15\"", "price": 783.62, "ram_gb": 8, "weight_lbs": 5.4, "battery_hrs": 8, "brand": "HP"}];
+const grid = document.getElementById("grid");
+const chat = document.getElementById("msgs");
+// Deterministic per-brand tint (stylized thumbnail — an honest icon, not a
+// faked product photo; real product images are unavailable for this data).
+const BRAND_HUE = {Asus:"#2a78d6", Dell:"#0a7d4f", Lenovo:"#c0392b",
+  HP:"#00838f", Apple:"#555", Framework:"#eb6834", Razer:"#3fae29",
+  Acer:"#8e44ad"};
+function laptopSVG(p){
+  const c = BRAND_HUE[p.brand] || "#6b7785";
+  return `<svg viewBox="0 0 120 80"><rect x="24" y="12" width="72" height="46" rx="4"
+    fill="#fff" stroke="${c}" stroke-width="3"/><rect x="30" y="18" width="60"
+    height="34" rx="2" fill="${c}" opacity="0.16"/><path d="M14 62 h92 l-6 8 h-80 z"
+    fill="${c}" opacity="0.85"/><rect x="52" y="62" width="16" height="3"
+    rx="1.5" fill="#fff" opacity="0.7"/></svg>`; }
+function rateval(p){
+  const s = 3.4 + ((p.battery_hrs||10)/20)*0.9 + ((p.ram_gb||8)>=32?0.5:0)
+            + (0.4 - ((p.weight_lbs||4)-2)/12);
+  return Math.max(3.2, Math.min(5, s)); }
+function rateline(p){
+  const r = rateval(p), full = Math.round(r);
+  const nrev = 40 + Math.round((p.price||500) % 900);   // deterministic review count
+  return `<div class="rateline"><span class="st">${"★".repeat(full)}${"☆".repeat(5-full)}</span>`+
+         `<span class="n">${r.toFixed(1)} · ${nrev.toLocaleString()} ratings</span></div>`; }
+function priceHTML(v){ const [w,f]=v.toFixed(2).split(".");
+  return `<div class="price"><span class="cur">$</span><span class="whole">${(+w).toLocaleString()}</span><span class="frac">${f}</span></div>`; }
+function specLine(p){ return p.ram_gb===undefined ? "" :
+  `<div class="specs">${p.ram_gb}GB RAM &nbsp;|&nbsp; ${p.weight_lbs} lb &nbsp;|&nbsp; `+
+  `${p.battery_hrs} hr battery &nbsp;|&nbsp; ${p.brand}</div>`; }
+function card(p, best){ return `<div class="card" data-sku="${p.sku}">
+  <div class="thumb">${laptopSVG(p)}</div>
+  <div class="info">
+    ${best?'<div class="badge-best"><em>Best</em> Match</div>':''}
+    <h3>${p.name}</h3>${rateline(p)}${priceHTML(p.price)}${specLine(p)}
+    <div class="deliv">FREE delivery <b>tomorrow</b></div>
+    <div class="stock">In stock</div>
+    <div class="buy">Add to Cart</div>
+    <div class="specs" style="font-size:11px;color:#aaa">${p.sku}</div>
+  </div></div>`; }
+function show(list, bestSku){ grid.innerHTML = list.map(p=>card(p, p.sku===bestSku)).join(""); }
+const rbar = document.getElementById("resultbar");
+window.pennymart = {
+  all(){ show(PRODUCTS); rbar.innerHTML = `Showing <b>${PRODUCTS.length}</b> products`; },
+  welcome(){ grid.innerHTML = `<div id="empty"><div class="big">🛍️</div>
+    <h2>Your shopping assistant is ready</h2>
+    <p>Tell it what you're looking for in the chat on the left — a budget,
+    a brand, how much RAM. It'll ask what it needs, then find the
+    cheapest option that fits and show it here.</p></div>`;
+    rbar.textContent = ""; },
+  demoHint(text){ const h=document.getElementById("hintbar");
+    h.innerHTML = `🎫 <b>Demo hint (only you see this — the assistant does NOT):</b> `
+      + text + ` — reveal these only when it asks.`; h.style.display="block"; },
+  bubble(role, text, note){ const d=document.createElement("div");
+    d.className="bubble "+role; d.textContent=text; chat.appendChild(d);
+    if(note){ const n=document.createElement("div"); n.className="note";
+      n.textContent=note; chat.appendChild(n);} chat.scrollTop=chat.scrollHeight; },
+  results(skus){ const by={}; PRODUCTS.forEach(p=>by[p.sku]=p);
+    const hits=skus.map(s=>by[s]).filter(Boolean);   // preserve cheapest-first order
+    rbar.innerHTML = `<b>${hits.length}</b> results &nbsp;·&nbsp; sorted by price (lowest first)`;
+    show(hits, skus[0]);                             // first = cheapest = best match
+    hits.forEach(p=>document.querySelector(`[data-sku="${p.sku}"]`)
+      .classList.add("hit")); },
+  select(sku){ const el=document.querySelector(`[data-sku="${sku}"]`);
+    if(el){ el.classList.add("selected"); el.scrollIntoView({block:"center",behavior:"smooth"}); } },
+  permission(items,total,savings,reply){ const b=document.getElementById("modal-body");
+    b.innerHTML = `<ul>${items.map(s=>`<li>${s}</li>`).join("")}</ul>
+      <div>Estimated total: <b>$${total}</b></div>` +
+      (savings!==null?`<div class="savings">Estimated savings: $${savings} vs priciest matching option</div>`:"");
+    document.getElementById("modal-reply").textContent = reply?`User: “${reply}”`:"";
+    document.getElementById("modal").style.display="flex"; },
+  closeModal(){ document.getElementById("modal").style.display="none"; },
+  hint(h){ const s=document.getElementById("say"); s.placeholder=h; s.focus(); },
+  addToCart(sku){ document.getElementById("cartn").textContent="1";
+    const bn=document.getElementById("banner");
+    bn.textContent=`✓ Added to Cart — ${sku} (simulated, with your explicit permission)`;
+    bn.style.display="block"; },
+};
+window.__human = null;
+(function(){
+  const say = document.getElementById("say");
+  const send = document.getElementById("send");
+  function submit(){ const v = say.value.trim(); if(!v) return;
+    say.value=""; window.__human = v; }
+  send.onclick = submit;
+  say.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+  document.getElementById("approve").addEventListener("click",
+    () => { window.__human = "__yes__"; });
+  document.getElementById("hold").addEventListener("click",
+    () => { window.__human = "__no__"; });
+})();
+pennymart.welcome();
+</script>
+<script>
+(function(){
+  const SERVER = "http://localhost:8765";
+  let messages = [{role:"system", content: "You are PennyPilot, a warm, helpful shopping assistant for the PennyMart store. You chat naturally like any good assistant, and you drive the store with tools. The user may write in English, Spanish, or a mix \u2014 reply in the user's language.\n\nTo DO anything in the store you MUST emit the matching JSON action on its OWN line. Write one short friendly sentence first, then the JSON line:\n  - ask what they need:   {\"action\": \"ask_user\", \"question\": \"<question>\"}\n  - find/show products:   {\"action\": \"search\", \"query\": \"<what to search for>\"}\n  - recommend one:        {\"action\": \"select_product\", \"product_id\": \"<SKU>\", \"reason\": \"<why>\"}\n  - offer to add (first): {\"action\": \"request_cart_permission\", \"items\": [\"<SKU>\"], \"estimated_total\": <number>}\n  - add after a clear yes:{\"action\": \"add_to_cart\", \"product_id\": \"<SKU>\"}\n\nFlow: ask clarifying questions until you know the budget AND every must-have requirement -> search -> recommend the CHEAPEST product meeting them all -> request permission -> add ONLY after an explicit yes for that exact product. Every shopping step needs its JSON action; use the SKUs from the latest search results, never invented ones.\n\nFollow this pattern EXACTLY \u2014 one friendly sentence, then the JSON line:\n\nUser: hi, I need a laptop\nYou: Happy to help you find a great deal! What's your budget?\n{\"action\": \"ask_user\", \"question\": \"What is your total budget?\"}\n\nUser: around $1200\nYou: Great. Any must-haves \u2014 RAM, weight, or a brand you prefer?\n{\"action\": \"ask_user\", \"question\": \"Any must-have requirements (RAM, weight, brand)?\"}\n\nUser: 16GB RAM and lightweight, any brand\nYou: Perfect \u2014 let me pull up the best matches.\n{\"action\": \"search\", \"query\": \"laptops under 1200 16GB RAM lightweight\"}\n\nSTORE: Matching products (cheapest first):\n- LAP-0007: $980, 16GB RAM, 2.8lbs, 11hrs, Dell\nYou: Best value is the Dell LAP-0007 at $980 \u2014 16GB RAM and just 2.8 lbs. Shall I add it?\n{\"action\": \"request_cart_permission\", \"items\": [\"LAP-0007\"], \"estimated_total\": 980}\n\nUser: yes please\nYou: Done \u2014 added to your cart!\n{\"action\": \"add_to_cart\", \"product_id\": \"LAP-0007\"}\n\nOnly pure non-shopping chat (greetings, thanks, \"how are you\", general questions) is prose with NO JSON.\n"}];
+  const granted = new Set();
+  let pendingItems = null, busy = false;
+  const say = document.getElementById("say");
+  const send = document.getElementById("send");
+
+  // ---- client-side shopping projection (from what YOU typed) ----------------
+  function constraints(){
+    const text = messages.filter(m=>m.role==="user")
+                         .map(m=>m.content).join(" ").toLowerCase();
+    const c = {};
+    const nums = (text.match(/\$?\s*(\d{3,5})/g)||[])
+      .map(s=>parseInt(s.replace(/[^0-9]/g,""))).filter(n=>n>=200 && n<=6000);
+    if(nums.length) c.budget = Math.max.apply(null, nums);
+    const ram = text.match(/(\d{1,2})\s*gb/);   if(ram) c.min_ram = parseInt(ram[1]);
+    if(/light|lightweight|ligera|liviana|thin|portable|delgad/.test(text)) c.max_weight = 3.5;
+    const wt = text.match(/(?:under|below|less than)\s*(\d(?:\.\d)?)\s*(?:lb|lbs|pound)/);
+    if(wt) c.max_weight = parseFloat(wt[1]);
+    for(const b of ["asus","dell","lenovo","hp","apple","framework","razer","acer"])
+      if(new RegExp("\\b"+b+"\\b").test(text)) c.brand = b;
+    return c;
+  }
+  function filt(cc){
+    return PRODUCTS.filter(p=>{
+      if(cc.budget && p.price > cc.budget) return false;
+      if(cc.min_ram && p.ram_gb < cc.min_ram) return false;
+      if(cc.max_weight && p.weight_lbs > cc.max_weight) return false;
+      if(cc.brand && String(p.brand).toLowerCase() !== cc.brand) return false;
+      return true;
+    }).sort((a,b)=>a.price-b.price);
+  }
+  function search(){                          // progressive relax -> always real hits
+    const c = constraints();
+    let hits = filt(c);
+    if(!hits.length){ const x=Object.assign({},c); delete x.max_weight; hits=filt(x); }
+    if(!hits.length){ const x=Object.assign({},c); delete x.max_weight; delete x.brand; hits=filt(x); }
+    if(!hits.length){ hits = filt({min_ram:c.min_ram}); }   // keep RAM, drop budget
+    if(!hits.length){ hits = PRODUCTS.slice().sort((a,b)=>a.price-b.price); }
+    return hits;
+  }
+  function resultsText(hits){
+    if(!hits.length) return "No matching products found.";
+    return "Matching products (cheapest first):\n" + hits.slice(0,6).map(p=>
+      "- "+p.sku+": $"+Math.round(p.price)+", "+p.ram_gb+"GB RAM, "+
+      p.weight_lbs+"lbs, "+p.battery_hrs+"hrs, "+p.brand).join("\n");
+  }
+
+  // ---- parse the model's optional JSON action out of its prose --------------
+  function extractAction(text){
+    const i = text.indexOf("{"); if(i<0) return null;
+    let depth=0, end=-1;
+    for(let j=i;j<text.length;j++){
+      if(text[j]==="{") depth++;
+      else if(text[j]==="}"){ depth--; if(depth===0){ end=j; break; } } }
+    if(end<0) return null;
+    try { return JSON.parse(text.slice(i,end+1)); } catch(e){ return null; }
+  }
+  function prose(text){ const i=text.indexOf("{"); return (i<0?text:text.slice(0,i)).trim(); }
+
+  function setBusy(b){ busy=b; say.disabled=b; send.disabled=b;
+    pennymart.hint(b ? "thinking…" : "type your reply…"); if(!b) say.focus(); }
+
+  async function agentStep(){
+    setBusy(true);
+    try{
+      const r = await fetch(SERVER+"/act", {method:"POST",
+        headers:{"Content-Type":"application/json"}, body: JSON.stringify({messages})});
+      const data = await r.json();
+      const text = (data && data.text) || "";
+      messages.push({role:"assistant", content:text});
+      const p = prose(text); if(p) pennymart.bubble("agent", p);
+      const act = extractAction(text);
+      setBusy(false);
+      if(act) await handle(act);
+    }catch(e){
+      setBusy(false);
+      pennymart.bubble("agent","(couldn't reach the model — is the tunnel up? "+
+        "ssh -L 8765:<node>:8765 explorer)");
+    }
+  }
+
+  async function handle(act){
+    if(act.action==="search"){
+      const hits = search();
+      pennymart.results(hits.map(p=>p.sku));
+      messages.push({role:"user", content: resultsText(hits)});
+      await agentStep();                       // let it recommend from the hits
+    } else if(act.action==="select_product" || act.action==="inspect_product"){
+      if(act.product_id) pennymart.select(act.product_id);
+    } else if(act.action==="request_cart_permission"){
+      pendingItems = act.items || [];
+      if(pendingItems[0]) pennymart.select(pendingItems[0]);   // highlight it in the grid
+      pennymart.permission(pendingItems, act.estimated_total==null?"":act.estimated_total,
+                           null, null);
+    } else if(act.action==="add_to_cart"){
+      if(granted.has(act.product_id)) pennymart.addToCart(act.product_id);
+      else pennymart.bubble("agent",
+        "(I can only add it once you approve — tap Add to Cart in the box.)");
+    }                                          // ask_user / chat: just wait for you
+  }
+
+  function submitUser(){
+    if(busy) return;
+    const v = say.value.trim(); if(!v) return;
+    say.value=""; pennymart.bubble("user", v);
+    messages.push({role:"user", content:v});
+    agentStep();
+  }
+  send.onclick = submitUser;
+  say.onkeydown = e => { if(e.key==="Enter") submitUser(); };
+  document.getElementById("approve").onclick = () => {
+    (pendingItems||[]).forEach(s=>granted.add(s));
+    pennymart.closeModal();
+    pennymart.bubble("user","Yes, please add it.");
+    messages.push({role:"user", content:"Yes, please add it."}); agentStep(); };
+  document.getElementById("hold").onclick = () => {
+    pennymart.closeModal();
+    pennymart.bubble("user","No, not yet.");
+    messages.push({role:"user", content:"No, not yet."}); agentStep(); };
+  pennymart.hint("say hi, or tell me what you're shopping for…");
+})();
+</script>
+</body></html>
