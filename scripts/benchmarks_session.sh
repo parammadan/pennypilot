@@ -11,7 +11,7 @@ source env.sh
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONUNBUFFERED=1
 POLICY=/scratch/madan.pa/pennypilot/rloo50_v2/policy
 ART=benchmarks/artifacts
-STAMP=$(date +%Y%m%d_%H%M)
+STAMP=${SLURM_JOB_ID:-$(date +%s)}   # unique per job: same-minute twins collided once
 mkdir -p "$ART/ss00" "$ART/ss01" "$ART/ss02"
 
 echo "=== SS0: baseline RL-iteration phase split ==="
