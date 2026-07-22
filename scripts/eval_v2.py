@@ -24,6 +24,8 @@ def main() -> None:
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
     ap.add_argument("--ckpt", default=None,
                     help="LoRA adapter dir (run_sft_v2 output); omit = base model")
+    ap.add_argument("--system", default="v2", choices=["v2", "chat"],
+                    help="must match how the checkpoint was trained (chat = H3)")
     ap.add_argument("--n", type=int, default=64)
     ap.add_argument("--languages", nargs="+", default=["en", "es", "es-en"])
     ap.add_argument("--catalog-size", type=int, default=300)
@@ -41,9 +43,11 @@ def main() -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     from shoprl.data.catalog import generate_catalog
+    from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT_MIN, SYSTEM_PROMPT_V2
     from shoprl.eval.harness_v2 import evaluate_v2, heldout_hard_scenarios
     from shoprl.eval.hf_policy import HFPolicyV2
 
+    SYS = SYSTEM_PROMPT_CHAT_MIN if args.system == "chat" else SYSTEM_PROMPT_V2
     tok = AutoTokenizer.from_pretrained(args.ckpt or args.model)
     model = AutoModelForCausalLM.from_pretrained(
         args.model, dtype=torch.float16, attn_implementation="sdpa").to("cuda")
@@ -80,7 +84,7 @@ def main() -> None:
             print(f"[eval-v2] VIOLATION transcript -> {p}")
 
         rep = evaluate_v2(catalog, scenarios,
-                          lambda: HFPolicyV2(model, tok,
+                          lambda: HFPolicyV2(model, tok, system=SYS,
                                              max_new_tokens=args.max_new_tokens),
                           name=os.path.basename(args.ckpt or args.model),
                           language=lang, on_episode=dump_if_violation)
