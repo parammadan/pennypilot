@@ -27,7 +27,7 @@ def run_arm(bucketed: bool, examples, tok, args) -> dict:
     torch.cuda.empty_cache()
     built = build_model("Qwen/Qwen2.5-1.5B-Instruct", method="lora",
                         dtype=torch.float16, device="cuda",
-                        grad_checkpointing=False)   # SS7: ckpt-off adopted
+                        grad_checkpointing=True)    # ckpt ON: batch-4 activations OOM ckpt-off (SS7 win holds only at batch<=2)
     model = built.policy
     for p in model.parameters():
         if p.requires_grad:

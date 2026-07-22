@@ -38,7 +38,7 @@ def main() -> None:
 
     built = build_model("Qwen/Qwen2.5-1.5B-Instruct", method="lora",
                         dtype=torch.float16, device="cuda",
-                        grad_checkpointing=False)
+                        grad_checkpointing=True)
     model, tok = built.policy, built.tokenizer
     for p in model.parameters():
         if p.requires_grad:
