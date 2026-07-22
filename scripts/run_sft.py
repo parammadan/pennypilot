@@ -87,6 +87,24 @@ def grammar_check(built, catalog, idx, n=40, seed=1000, max_turns=10) -> dict:
             "samples": samples}
 
 
+
+def _volta_bf16_guard(dtype_name: str, force: bool) -> None:
+    """Audit item 5: bf16 on compute capability 7.0 runs EMULATED (no tensor
+    cores; measured 4.27x slower than fp16+GradScaler). This v1-era script
+    defaults to bf16 for historical reproduction — refuse to run it silently
+    on Volta unless explicitly forced."""
+    import sys
+
+    import torch
+    if dtype_name != "bfloat16" or not torch.cuda.is_available():
+        return
+    if torch.cuda.get_device_capability(0) == (7, 0) and not force:
+        sys.exit(
+            "REFUSING: bf16 on Volta (cc 7.0) is emulated — measured 4.27x "
+            "slower than fp16+GradScaler (profiling/gate/precision.json). "
+            "Use --dtype float16 (v2 recipe) or pass --force-bf16 to "
+            "reproduce the historical v1 runs knowingly.")
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -102,7 +120,10 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=1e-5)
     ap.add_argument("--catalog-size", type=int, default=500)
     ap.add_argument("--out-dir", default="runs/sft")
+    ap.add_argument("--force-bf16", action="store_true",
+                help="knowingly run emulated bf16 on Volta (historical v1 recipe)")
     args = ap.parse_args()
+    _volta_bf16_guard(args.dtype, args.force_bf16)
 
     catalog = generate_catalog(n=args.catalog_size, seed=0)
     idx = catalog_index(catalog)

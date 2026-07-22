@@ -23,6 +23,24 @@ from shoprl.train.build import build_model
 from shoprl.train.rloo import RLOOConfig, rloo_step
 
 
+
+def _volta_bf16_guard(dtype_name: str, force: bool) -> None:
+    """Audit item 5: bf16 on compute capability 7.0 runs EMULATED (no tensor
+    cores; measured 4.27x slower than fp16+GradScaler). This v1-era script
+    defaults to bf16 for historical reproduction — refuse to run it silently
+    on Volta unless explicitly forced."""
+    import sys
+
+    import torch
+    if dtype_name != "bfloat16" or not torch.cuda.is_available():
+        return
+    if torch.cuda.get_device_capability(0) == (7, 0) and not force:
+        sys.exit(
+            "REFUSING: bf16 on Volta (cc 7.0) is emulated — measured 4.27x "
+            "slower than fp16+GradScaler (profiling/gate/precision.json). "
+            "Use --dtype float16 (v2 recipe) or pass --force-bf16 to "
+            "reproduce the historical v1 runs knowingly.")
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True, help="SFT checkpoint (policy + ref init)")
@@ -39,7 +57,10 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=2000, help="RLOO prompt seed (disjoint from SFT=0, eval=1000)")
     ap.add_argument("--save-every", type=int, default=10)
     ap.add_argument("--out-dir", default="runs/rloo")
+    ap.add_argument("--force-bf16", action="store_true",
+                help="knowingly run emulated bf16 on Volta (historical v1 recipe)")
     args = ap.parse_args()
+    _volta_bf16_guard(args.dtype, args.force_bf16)
 
     dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16}[args.dtype]
     built = build_model(args.ckpt, method="full", dtype=dtype, device="cuda",

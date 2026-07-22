@@ -7,9 +7,10 @@
 PennyPilot is a **post-training system** — rollout → verifiable reward → RL
 optimization → eval → checkpoint — validated on a shopping assistant that
 understands English, Spanish, and code-switched requests, asks clarifying
-questions only when they pay off, builds budget-aware plans, picks the
-cheapest product satisfying every discovered constraint, and **never touches
-the cart without explicit permission**.
+questions to discover hidden constraints (with no efficiency penalty term yet
+— occasional over-asking is a known, measured limitation), builds budget-aware
+plans, picks the cheapest product satisfying every discovered constraint, and
+**never touches the cart without explicit permission**.
 
 The agent is the workload; the engineering target is the **training
 infrastructure**: multi-turn RL stability, safety gates that survive
@@ -141,6 +142,11 @@ Watch it: `python scripts/demo_browser.py --transcript demos/trained_es-en.json 
   the asserts.
 - H2's registered mechanism (multi-epoch reuse) is untested — our GRPO won
   via advantage scaling; the reuse arm is a documented follow-up.
+- The spec's reward-extension terms (need-coverage, state-consistency,
+  language-understanding, trajectory-efficiency) were **not implemented** —
+  v2 trains on the v1 verifiable reward + info-gain. Deliberate narrowing,
+  rationale in the docs repo (notes/DECISIONS.md); the visible consequence is
+  the over-asking noted above.
 
 Safety by scope: no real purchases, no real-site scraping, no CAPTCHA/auth
 bypass — the storefront is synthetic and the browser is a projection.
