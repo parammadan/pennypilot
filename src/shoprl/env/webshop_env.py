@@ -34,6 +34,19 @@ from shoprl.state import DialogueState
 
 _ASIN = re.compile(r"\b(B0[A-Z0-9]{8})\b")
 _PRICE = re.compile(r"\$(\d+(?:\.\d+)?)")
+# text_rich mode wraps clickable text in these markers (verified against
+# WebShop web_agent_text_env.convert_html_to_text, 2026-07-23). The RL
+# baselines use `text` (simple [SEP]) mode, but the parser is made
+# mode-agnostic so it survives whichever the real instance is configured with.
+_BUTTON = re.compile(r"\[/?(?:clicked )?button_?\]")
+# Pagination / chrome tokens that are NOT products.
+_PAGINATION = ("< prev", "next >", "back to search", "search", "buy now",
+               "page 1", "instruction:", "description", "features", "reviews")
+
+
+def strip_markup(obs: str) -> str:
+    """Remove text_rich button markup so one parser handles both modes."""
+    return _BUTTON.sub("", obs)
 
 
 @dataclass
@@ -44,22 +57,42 @@ class WebShopItem:
 
 
 def parse_results_page(obs: str) -> list[WebShopItem]:
-    """Parse a WebShop results page (`[SEP]`-delimited: ASIN, title, $price
-    triples) into structured items. Tolerant of surrounding chrome tokens."""
-    toks = [t.strip() for t in obs.split("[SEP]")]
+    """Parse a WebShop results page into structured items — mode-agnostic.
+
+    Handles both `text` (bare `[SEP]` ASIN/title/$price triples) and
+    `text_rich` (`[button] … [button_]`-wrapped) observations, tolerant of
+    pagination/chrome tokens and multi-page listings (`< Prev` / `Next >`)."""
+    toks = [t.strip() for t in strip_markup(obs).split("[SEP]")]
+    toks = [t for t in toks if t and t.lower() not in _PAGINATION]
     items: list[WebShopItem] = []
     i = 0
     while i < len(toks):
         m = _ASIN.fullmatch(toks[i])
-        if m and i + 2 < len(toks):
-            pm = _PRICE.search(toks[i + 2])
-            if pm:
-                items.append(WebShopItem(m.group(1), toks[i + 1],
-                                         float(pm.group(1))))
-                i += 3
-                continue
+        if m:
+            # title/price follow, but a page may interleave chrome — scan the
+            # next few tokens for the first price rather than assuming +2.
+            title, price = toks[i + 1] if i + 1 < len(toks) else "", None
+            for j in range(i + 1, min(i + 5, len(toks))):
+                pm = _PRICE.search(toks[j])
+                if pm:
+                    price = float(pm.group(1))
+                    break
+            if price is not None:
+                items.append(WebShopItem(m.group(1), title, price))
         i += 1
-    return items
+    # De-dupe by ASIN (a product can repeat across page chrome), keep first.
+    seen, out = set(), []
+    for it in items:
+        if it.asin not in seen:
+            seen.add(it.asin)
+            out.append(it)
+    return out
+
+
+def has_next_page(obs: str) -> bool:
+    """True if the results page exposes a `Next >` pagination control —
+    the adapter can then issue `click[Next >]` to page through results."""
+    return "next >" in strip_markup(obs).lower()
 
 
 def render_candidates(items: list[WebShopItem]) -> str:
