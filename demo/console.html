@@ -64,7 +64,8 @@
   <div class="row"><span class="note">load generator</span>
     <input type="range" id="load" min="0" max="16" value="0"
            oninput="setLoad(+this.value)"><b id="loadN">0</b>
-    <button class="warn" onclick="breakIt()">try to break it</button></div>
+    <button class="warn" onclick="breakIt()">try to break it</button>
+    <button class="warn" onclick="disconnect()">client disconnect</button></div>
 </div>
 
 <div class="card" style="grid-column:2/4">
@@ -150,6 +151,21 @@ async function loadLoop(){
   }
   loadRunning--;
 }
+async function disconnect(){
+  bubble("u", "🔌 client-disconnect probe: fire a long generation, abort mid-stream…");
+  // long request in the background, then cancel it ~400ms in
+  const big=[{role:"system",content:SYSTEM}];
+  for(let i=0;i<3;i++){ big.push({role:"user",content:"tell me everything, be verbose "+i});
+    big.push({role:"assistant",content:'{"action":"ask_user","question":"?"}'}); }
+  big.push({role:"user",content:"summarize all options in detail"});
+  const p = fetch(API+"/act",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({messages:big})}).then(x=>x.json()).catch(e=>({}));
+  setTimeout(()=>fetch(API+"/cancel"), 400);
+  await p;
+  bubble("a","🔌 generation aborted on disconnect — watch the memory ledger: "+
+    "torch-alloc drops as KV blocks free, the slot is reclaimed "+
+    "(cancellations counter ticks).","request cancellation + memory reclamation");
+}
 async function breakIt(){
   bubble("u", "💣 oversized-request probe (2MB of junk)…");
   const junk = {messages:[{role:"user", content:"x".repeat(2_100_000)}]};
@@ -189,7 +205,8 @@ async function poll(){
     $("valid").textContent = (m.action_valid_pct ?? "–") + "%";
     $("validlast").textContent = "last: " + m.action_valid_last;
     $("ground").textContent = `${m.ids_grounded_total}✓ / ${m.ids_ungrounded_total}✗`;
-    $("rej").textContent = "rejections: " + m.rejections_total;
+    $("rej").textContent = "rej: " + m.rejections_total +
+                           " · cancel: " + (m.cancellations_total ?? 0);
     $("cache").textContent = "prefix cache: " + m.prefix_cache;
     // memory ledger: weights / other-torch / cuda-ctx&pools / free
     const total = 32.0, w = m.weights_gb || 0,

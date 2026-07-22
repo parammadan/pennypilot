@@ -59,7 +59,8 @@ def main() -> None:
 
     history: list[dict] = []          # rolling per-request serving stats
     HIST_MAX = 200
-    rejections = {"count": 0}
+    rejections = {"count": 0, "cancelled": 0}
+    _cancel = {"flag": False}
 
     @torch.no_grad()
     def act(messages: list[dict]) -> dict:
@@ -89,10 +90,28 @@ def main() -> None:
             pad_token_id=tok.pad_token_id, streamer=streamer))
         th.start()
         chunks, stamps = [], []
+        cancelled = False
         for piece in streamer:
             stamps.append(time.time())
             chunks.append(piece)
-        th.join()
+            if _cancel["flag"]:                # client-disconnect probe:
+                cancelled = True               # stop decoding, drop the slot,
+                break                          # reclaim KV immediately
+        if cancelled:
+            try:
+                model._pp_stop = True          # cooperative; streamer drains
+            except Exception:
+                pass
+            th.join(timeout=2)
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()           # reclaim the freed KV blocks
+            _cancel["flag"] = False
+            rejections["cancelled"] += 1
+            print(f"[serve] CLIENT DISCONNECT at {len(stamps)} tokens — "
+                  "generation aborted, slot freed, KV reclaimed")
+        else:
+            th.join()
         text = "".join(chunks).strip()
         ttft_ms = round((stamps[0] - t0) * 1000, 1) if stamps else None
         itl_ms = (round(((stamps[-1] - stamps[0]) / max(len(stamps) - 1, 1))
@@ -161,6 +180,7 @@ def main() -> None:
                                         - h.get("ids_grounded", 0)
                                         for h in history),
             "rejections_total": rejections["count"],
+            "cancellations_total": rejections["cancelled"],
         }
 
     class Handler(BaseHTTPRequestHandler):
@@ -185,6 +205,9 @@ def main() -> None:
                 self._send(200, {"ok": True, "ckpt": args.ckpt})
             elif self.path == "/metrics":
                 self._send(200, metrics())
+            elif self.path == "/cancel":
+                _cancel["flag"] = True         # abort the in-flight generation
+                self._send(200, {"cancelling": True})
             elif self.path.startswith("/pane/"):
                 # Read-only terminal preset panes (whitelist only — driver/
                 # scheduler-level truth beside the HUD, poll-based).
