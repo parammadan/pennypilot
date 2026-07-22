@@ -14,7 +14,7 @@ echo "=== SS3: prefix caching ==="
 # (mma->mma layout needs Ampere). SS3/SS4 measure engine physics (prefill
 # growth, decode batching), identical with/without an adapter; documented.
 VLLM_USE_V1=0 $VPY benchmarks/ss03_prefix_cache.py \
-  --predicted "APC-off prefill grows with turns (turn9 >= 3x turn2); APC-on near-flat (turn9 <= 1.5x turn2)" \
+  --predicted "APC-off per-turn latency GROWS with turns (turn9-turn2 delta large); APC-on growth <= 1/3 of off-growth (decode offset constant in both)" \
   2>&1 | tee benchmarks/artifacts/ss03/run_${SLURM_JOB_ID:-x}.log || exit 1
 
 echo "=== SS4 + SS4b: concurrency + utilization ==="

@@ -8,8 +8,12 @@ conversation; WITH automatic prefix caching only the delta is prefilled.
         --sft-adapter <adapter> --predicted "..." \
         2>&1 | tee benchmarks/artifacts/ss03/run_$SLURM_JOB_ID.log
 
-Prefill latency proxy: generate(max_tokens=1) wall time per turn, measured on
-the natural sequential conversation (the exact access pattern training uses).
+Measurement: per-turn generate latency at FIXED max_tokens=64 (the proven-safe
+kernel shape on these V100s — max_tokens=1/temp=0 shapes hard-abort in Triton
+on some call sequences, see CHALLENGES #26). Decode cost is ~constant per
+turn, so the GROWTH of the curve across turns isolates prefill growth; APC
+should flatten that growth. Honest note: absolute values include ~64 decode
+steps; the slope is the signal.
 """
 from __future__ import annotations
 
@@ -73,7 +77,7 @@ def main() -> None:
                                        add_generation_prompt=True)
                for p in prefixes]
     prompt_tokens = [len(tok(p)["input_ids"]) for p in prompts]
-    sp = SamplingParams(temperature=0.0, max_tokens=1)
+    sp = SamplingParams(temperature=0.8, max_tokens=64, seed=0)
 
     lora_req = None
     results: dict[str, list[float]] = {}
@@ -105,7 +109,7 @@ def main() -> None:
     _plot(results, prompt_tokens, args.out, predicted, measured)
     with open(os.path.join(args.out, "result.json"), "w") as f:
         json.dump({"prompt_tokens": prompt_tokens, **results}, f, indent=2)
-    write_manifest(args.out, "SS3", "per-turn prefill latency, APC off vs on",
+    write_manifest(args.out, "SS3", "per-turn latency (fixed 64-tok decode), APC off vs on",
                    predicted=predicted, measured=measured,
                    mechanism=("each turn's prompt extends the last; APC reuses "
                               "the shared prefix's KV blocks so only the new "
@@ -134,7 +138,7 @@ def _plot(results, prompt_tokens, out, predicted, measured) -> None:
                 xytext=(-8, 10), textcoords="offset points", ha="right",
                 color="#0b0b0b", fontsize=9)
     ax.set_xlabel("conversation turn", color="#52514e")
-    ax.set_ylabel("prefill latency (ms, max_tokens=1)", color="#52514e")
+    ax.set_ylabel("per-turn latency (ms, 64-token decode)", color="#52514e")
     ax.set_facecolor("#fcfcfb")
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
