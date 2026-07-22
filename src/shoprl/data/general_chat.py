@@ -84,6 +84,8 @@ def rehearsal_questions(n: int = 180, seed: int = 0) -> list[dict]:
         pool.append({"q": f"What is {a} times {b}?", "lang": "en"})
     pool += [{"q": s, "lang": "en"} for s in _SMALL]
     pool += [{"q": s, "lang": "es"} for s in _ES]
+    eval_qs = {x["q"] for x in GENERAL_EVAL}   # never train on a held-out question
+    pool = [x for x in pool if x["q"] not in eval_qs]
     rng.shuffle(pool)
     return pool[:n]
 
