@@ -32,6 +32,9 @@ def main() -> None:
     ap.add_argument("--ckpt", required=True)
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--max-new-tokens", type=int, default=64)
+    ap.add_argument("--peak-flops", type=float, default=125e12,
+                    help="hardware fp16 peak for MFU (V100 tensor: 125e12; "
+                         "H200: ~989e12)")
     args = ap.parse_args()
 
     import torch
@@ -41,6 +44,8 @@ def main() -> None:
     from transformers import TextIteratorStreamer
 
     model, tok = load_hf_policy(args.model, args.ckpt)
+    n_params = sum(p.numel() for p in model.parameters())
+    flops_per_token = 2 * n_params           # forward ≈ 2·P FLOPs/token
     weights_gb = round(sum(p.numel() * p.element_size()
                            for p in model.parameters()) / 2**30, 2)
     print(f"[serve] policy loaded from {args.ckpt} ({weights_gb} GB weights)")
@@ -100,6 +105,23 @@ def main() -> None:
             "gpu_mem_gb": mem_gb,
             "weights_gb": weights_gb,
             "torch_alloc_gb": round(torch.cuda.memory_allocated() / 2**30, 2),
+            # MFU, honestly split: decode from rolling gen tok/s; prefill from
+            # the LAST request's prompt_tokens/TTFT. Decode MFU is inherently
+            # low (bandwidth-bound) — the console displays that note verbatim.
+            "mfu_decode_pct": (round(100 * (sum(h["gen_tokens"] for h in recent)
+                                            / 60.0) * flops_per_token
+                                     / args.peak_flops, 3) if recent else None),
+            "mfu_prefill_last_pct": (round(100 * history[-1]["prompt_tokens"]
+                                           * flops_per_token
+                                           / ((history[-1]["ttft_ms"] or 1e9)
+                                              / 1000) / args.peak_flops, 2)
+                                     if history and history[-1]["ttft_ms"]
+                                     else None),
+            "peak_flops": args.peak_flops,
+            # Honestly sourceable only where APC runs (Ampere+): on Volta this
+            # stays a verdict string, never an approximation.
+            "prefix_cache": "hardware-gated on Volta (CHALLENGES #26); live "
+                            "hit-rate wires up on the H200 leg",
         }
 
     class Handler(BaseHTTPRequestHandler):
