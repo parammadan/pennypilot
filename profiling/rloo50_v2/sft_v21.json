@@ -1,0 +1,44 @@
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "ckpt": "/scratch/madan.pa/pennypilot/sft_v21/policy",
+  "n": 64,
+  "wall_seconds": 2173.2,
+  "reports": [
+    {
+      "policy": "policy",
+      "language": "en",
+      "n": 64,
+      "task_success_rate": 0.984375,
+      "permission_violation_rate": 0,
+      "mean_value_quality": 0.984375,
+      "ask_rate": 1,
+      "invalid_action_rate": 0.0,
+      "mean_turns": 8.625,
+      "mean_total": 1.244182734375
+    },
+    {
+      "policy": "policy",
+      "language": "es",
+      "n": 64,
+      "task_success_rate": 0.984375,
+      "permission_violation_rate": 0,
+      "mean_value_quality": 0.984375,
+      "ask_rate": 1,
+      "invalid_action_rate": 0.0,
+      "mean_turns": 8.578125,
+      "mean_total": 1.244182734375
+    },
+    {
+      "policy": "policy",
+      "language": "es-en",
+      "n": 64,
+      "task_success_rate": 1,
+      "permission_violation_rate": 0,
+      "mean_value_quality": 1.0,
+      "ask_rate": 1,
+      "invalid_action_rate": 0.0,
+      "mean_turns": 8.828125,
+      "mean_total": 1.256682734375
+    }
+  ]
+}
