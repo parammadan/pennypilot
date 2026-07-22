@@ -27,6 +27,15 @@ def brief_text(scen) -> str:
     return "; ".join(lines)
 
 
+def _agent_say(text: str, chat: bool) -> str:
+    """Chat-face mode shows the friendly prose to the shopper and hides the raw
+    JSON action line (the JSON drives the store projection, not the bubble)."""
+    if not chat:
+        return text
+    prose = text.split("{", 1)[0].strip()
+    return prose or "(one moment…)"
+
+
 # ---------------- terminal mode pieces (unchanged behaviour) ----------------
 class TerminalHuman:
     def __init__(self, phrase):
@@ -112,7 +121,11 @@ def run_browser_chat(args) -> None:
     html = Path(tempfile.mkdtemp(prefix="pennymart-human-")) / "pennymart.html"
     html.write_text(render_storefront_html(catalog))
 
-    policy = RemotePolicyV2(args.policy_url)
+    if args.chat:
+        from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT
+        policy = RemotePolicyV2(args.policy_url, system=SYSTEM_PROMPT_CHAT)
+    else:
+        policy = RemotePolicyV2(args.policy_url)
     print("policy server:", json.dumps(policy.health()))
     print(f"SUGGESTED BRIEF (optional — say whatever you want!): {brief_text(scen)}")
 
@@ -201,7 +214,8 @@ def run_browser_chat(args) -> None:
         while not done and steps < 15:
             action_text = policy.act(obs)
             step = env.execute_text(action_text)
-            page.evaluate(f"pennymart.bubble('agent', {json.dumps(action_text)}, "
+            page.evaluate(f"pennymart.bubble('agent', "
+                          f"{json.dumps(_agent_say(action_text, args.chat))}, "
                           f"{json.dumps(step.note)})")
             r = parse_agent_action(action_text)
             if r.ok and r.action.action != "request_cart_permission":
@@ -280,7 +294,11 @@ def run_terminal_chat(args) -> None:
 
     env = HumanLoopEnv(catalog, scen, idx=idx, language="es-en",
                        conversation=conv)
-    policy = RemotePolicyV2(args.policy_url)
+    if args.chat:
+        from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT
+        policy = RemotePolicyV2(args.policy_url, system=SYSTEM_PROMPT_CHAT)
+    else:
+        policy = RemotePolicyV2(args.policy_url)
     print("policy server:", json.dumps(policy.health()))
     opener = env.reset()
     policy.reset()
@@ -290,7 +308,7 @@ def run_terminal_chat(args) -> None:
     steps = 0
     while not done and steps < 15:
         action_text = policy.act(obs)
-        print(f"🤖 agent: {action_text}")
+        print(f"🤖 agent: {_agent_say(action_text, args.chat)}")
         step = env.execute_text(action_text)
         if step.observation:
             print(f"🏪 store/you: {step.observation}")
@@ -317,6 +335,10 @@ def main() -> None:
     ap.add_argument("--scenario-index", type=int, default=4)
     ap.add_argument("--no-browser", action="store_true",
                     help="pure terminal chat instead of the browser UI")
+    ap.add_argument("--chat", action="store_true",
+                    help="talk to the bigger Qwen2.5-7B-Instruct chat-face "
+                         "(SYSTEM_PROMPT_CHAT): natural prose + store actions. "
+                         "Point --policy-url at a serve_7b.sh server.")
     args = ap.parse_args()
     if args.no_browser:
         run_terminal_chat(args)

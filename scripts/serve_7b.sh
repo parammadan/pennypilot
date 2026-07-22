@@ -11,4 +11,4 @@ export HF_HOME=/scratch/madan.pa/hf_cache HF_HUB_OFFLINE=1 \
 cd "$HOME/pennywise-v100-infra"
 /home/madan.pa/.conda/envs/shoprl/bin/python scripts/serve_policy.py \
     --model Qwen/Qwen2.5-7B-Instruct \
-    --port 8765 --max-new-tokens 160 --peak-flops 125e12
+    --port 8765 --max-new-tokens 256 --peak-flops 125e12
