@@ -26,6 +26,9 @@ def main() -> None:
     ap.add_argument("--scenario-seed", type=int, default=11)
     ap.add_argument("--scenario-index", type=int, default=0)
     ap.add_argument("--language", default="es-en", choices=["en", "es", "es-en"])
+    ap.add_argument("--ckpt", default=None,
+                    help="LoRA adapter dir — record the TRAINED policy instead "
+                         "of the oracle (GPU)")
     ap.add_argument("--out", default="runs/demo/oracle_esen.json")
     args = ap.parse_args()
 
@@ -35,17 +38,35 @@ def main() -> None:
                                    seed=args.scenario_seed)[args.scenario_index]
     env = SyntheticCatalogEnvironment(catalog, scen, idx=idx,
                                       language=args.language)
-    policy = OracleGoodV2()
-    env.reset()
-    policy.reset(scen, idx)
-    done = False
-    while not done:
-        done = env.execute_text(policy.act()).done
+    if args.ckpt:
+        from shoprl.eval.hf_policy import HFPolicyV2
+        from shoprl.profiling.bench_common import load_hf_policy
+        model, tok = load_hf_policy("Qwen/Qwen2.5-1.5B-Instruct", args.ckpt)
+        policy = HFPolicyV2(model, tok)
+        policy_label = f"trained ({args.ckpt.rstrip('/').split('/')[-2]})"
+        env.reset()
+        policy.reset()
+        obs = env.observe()
+        done = False
+        steps = 0
+        while not done and steps < 15:
+            step = env.execute_text(policy.act(obs))
+            obs = step.observation
+            done = step.done
+            steps += 1
+    else:
+        policy = OracleGoodV2()
+        policy_label = "oracle (scripted ceiling)"
+        env.reset()
+        policy.reset(scen, idx)
+        done = False
+        while not done:
+            done = env.execute_text(policy.act()).done
 
     record = transcript_record(env, env.calculate_outcome())
     record["opener"] = env.opener
     bundle = {"catalog_n": args.catalog_n, "catalog_seed": args.catalog_seed,
-              "language": args.language, "policy": "oracle (scripted ceiling)",
+              "language": args.language, "policy": policy_label,
               "record": record}
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w") as f:
