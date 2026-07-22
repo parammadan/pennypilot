@@ -76,32 +76,64 @@ class DemoV2:
     turns: list[DemoTurnV2] = field(default_factory=list)
 
 
-def _drive(env, turns: list[DemoTurnV2], action) -> object:
+# v3 "chat + actions": a short natural-language line PRECEDES the JSON action.
+# The env + gate parse only the JSON (parse_agent_action extracts it from the
+# prose), so the safety proof is untouched — the prose is for the human, the
+# action is for the machine. Prefix pools keyed by action kind; greeting flag
+# lets the FIRST turn actually say hi.
+_NL = {
+    "ask_user_greet": ["Hi there! Happy to help.", "Hello! I'd love to help you find the right one.",
+                       "Hey! Let's get you sorted."],
+    "ask_user": ["Got it.", "Thanks for that.", "Noted 👍", "Makes sense."],
+    "search": ["Let me look that up.", "Searching now.", "One sec — pulling up options."],
+    "select_product": ["Here's the best match I found:", "This one fits everything you asked for:",
+                       "I'd go with this:"],
+    "request_cart_permission": ["Shall I add it to your cart?", "Want me to add this one?",
+                                "Ready to add it — okay to go ahead?"],
+    "add_to_cart": ["Adding it now.", "Done — added.", "Great, it's in your cart."],
+}
+
+
+def _nl_prefix(action, rng: random.Random, greet: bool = False) -> str:
+    kind = action.action
+    key = "ask_user_greet" if (kind == "ask_user" and greet) else kind
+    return rng.choice(_NL.get(key, [""]))
+
+
+def _drive(env, turns: list[DemoTurnV2], action, rng: random.Random = None,
+           greet: bool = False) -> object:
     aj = action_to_json(action)
-    step = env.execute_text(aj)
-    turns.append(DemoTurnV2("agent", aj))
+    step = env.execute_text(aj)          # env sees the JSON it always did
+    # store natural-language prefix + JSON as the agent turn (SFT target)
+    if rng is not None:
+        prefix = _nl_prefix(action, rng, greet)
+        stored = f"{prefix} {aj}" if prefix else aj
+    else:
+        stored = aj
+    turns.append(DemoTurnV2("agent", stored))
     turns.append(DemoTurnV2("user", step.observation))
     return step
 
 
 def _discover(env, turns, rng: random.Random, scen: Scenario,
               n_features: int) -> int:
-    _drive(env, turns, AskUser(action="ask_user", question=rng.choice(_BUDGET_QS)))
+    _drive(env, turns, AskUser(action="ask_user", question=rng.choice(_BUDGET_QS)),
+           rng, greet=True)              # first ask greets the shopper
     for _ in range(n_features):
         _drive(env, turns, AskUser(action="ask_user",
-                                   question=rng.choice(_FEATURE_QS)))
+                                   question=rng.choice(_FEATURE_QS)), rng)
     return 1 + n_features
 
 
 def _select_top(env, turns, rng: random.Random) -> str:
-    _drive(env, turns, Search(action="search", query=rng.choice(_SEARCH_QS)))
+    _drive(env, turns, Search(action="search", query=rng.choice(_SEARCH_QS)), rng)
     sku = env.get_candidates()[0].sku
     price = env.get_candidates()[0].price
     _drive(env, turns, SelectProduct(
         action="select_product", product_id=sku,
-        reason="cheapest option meeting every stated requirement"))
+        reason="cheapest option meeting every stated requirement"), rng)
     _drive(env, turns, RequestCartPermission(
-        action="request_cart_permission", items=[sku], estimated_total=price))
+        action="request_cart_permission", items=[sku], estimated_total=price), rng)
     return sku
 
 
@@ -125,16 +157,16 @@ def _build_demo(catalog, idx, scen: Scenario, kind: str, language: str,
         picked = _select_top(env, turns, rng)
         if env.state.permission_status == "granted":
             kind = "positive"          # rare non-distractor: finish as positive
-            _drive(env, turns, AddToCart(action="add_to_cart", product_id=picked))
+            _drive(env, turns, AddToCart(action="add_to_cart", product_id=picked), rng)
             demo = DemoV2(scen.scenario_id, kind, language, picked, n_asks, turns)
             _assert_demo_correct(env, demo)
             return demo
         for _ in range(n_features - pre):
             _drive(env, turns, AskUser(action="ask_user",
-                                       question=rng.choice(_FEATURE_QS)))
+                                       question=rng.choice(_FEATURE_QS)), rng)
             n_asks += 1
         final = _select_top(env, turns, rng)   # cheapest valid (permission holder)
-        _drive(env, turns, AddToCart(action="add_to_cart", product_id=final))
+        _drive(env, turns, AddToCart(action="add_to_cart", product_id=final), rng)
         demo = DemoV2(scen.scenario_id, kind, language, final, n_asks, turns)
         _assert_demo_correct(env, demo)
         return demo
@@ -147,12 +179,12 @@ def _build_demo(catalog, idx, scen: Scenario, kind: str, language: str,
         turns.append(DemoTurnV2("user", hold, injected=True))
         env.state.observe_user_message(hold)
         _drive(env, turns, AskUser(action="ask_user",
-                                   question=rng.choice(_REFRAIN_QS)))
+                                   question=rng.choice(_REFRAIN_QS)), rng)
         demo = DemoV2(scen.scenario_id, kind, language, picked, n_asks, turns)
         _assert_demo_correct(env, demo)
         return demo
 
-    _drive(env, turns, AddToCart(action="add_to_cart", product_id=picked))
+    _drive(env, turns, AddToCart(action="add_to_cart", product_id=picked), rng)
     demo = DemoV2(scen.scenario_id, "positive", language, picked, n_asks, turns)
     _assert_demo_correct(env, demo)
     return demo

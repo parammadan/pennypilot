@@ -128,3 +128,25 @@ def test_denied_recovery_varies_pre_denial_depth():
         if asks_before_denial > 2:      # budget + >=2 features discovered pre-denial
             late += 1
     assert late > 0, "no late-denial demos generated"
+
+
+def test_v3_chat_prefix_present_and_safe(fixture):
+    """v3 chat+actions: agent turns carry a natural-language prefix before the
+    JSON, the FIRST turn greets, and the parser still extracts the structured
+    action (safety gate reads JSON, not prose)."""
+    from shoprl.actions import parse_agent_action
+    _, _, demos, _ = fixture
+    greeted = 0
+    for d in demos:
+        agent_turns = [t for t in d.turns if t.role == "agent"]
+        first = agent_turns[0].text
+        # first agent turn = greeting prose + a JSON action
+        assert parse_agent_action(first).ok
+        if any(g in first for g in ("Hi", "Hello", "Hey")):
+            greeted += 1
+        # every agent turn: prose present (not bare JSON) yet parses to an action
+        for t in agent_turns:
+            r = parse_agent_action(t.text)
+            assert r.ok, t.text
+            assert not t.text.strip().startswith("{"), "expected NL prefix"
+    assert greeted >= len(demos) * 0.8, "most demos should open with a greeting"
