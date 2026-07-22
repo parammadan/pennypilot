@@ -240,6 +240,146 @@ pennymart.welcome();
 </script></body></html>""".replace("__TITLE__", title).replace("__PRODUCTS__", products)
 
 
+# ---- self-contained chat+shop demo (no Playwright; open in any browser) -----
+def render_chat_demo_html(catalog, server_url: str = "http://localhost:8765",
+                          system_prompt: str | None = None,
+                          title: str = "PennyMart — live assistant") -> str:
+    """A storefront page whose OWN JavaScript talks to a serve_policy.py server
+    (the 7B chat-face, reached over an SSH tunnel at server_url). You just open
+    the file in a normal browser and type — no Playwright, no Python client.
+
+    The page reuses render_storefront_html's markup + window.pennymart API and
+    overrides only the input handlers with a fetch-driven chat loop. Shopping is
+    projected CLIENT-SIDE from what you typed (an honest demo projection, same
+    spirit as the replay path): search filters the embedded catalog by the
+    budget / RAM / weight / brand it can read from your messages, and the
+    permission gate holds — add_to_cart is refused unless you approved that SKU.
+    """
+    from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT
+
+    html = render_storefront_html(catalog, title=title)
+    sys_json = json.dumps(system_prompt or SYSTEM_PROMPT_CHAT)
+    driver = """
+<script>
+(function(){
+  const SERVER = "__SERVER__";
+  let messages = [{role:"system", content: __SYS__}];
+  const granted = new Set();
+  let pendingItems = null, busy = false;
+  const say = document.getElementById("say");
+  const send = document.getElementById("send");
+
+  // ---- client-side shopping projection (from what YOU typed) ----------------
+  function constraints(){
+    const text = messages.filter(m=>m.role==="user")
+                         .map(m=>m.content).join(" ").toLowerCase();
+    const c = {};
+    const nums = (text.match(/\\$?\\s*(\\d{3,5})/g)||[])
+      .map(s=>parseInt(s.replace(/[^0-9]/g,""))).filter(n=>n>=200 && n<=6000);
+    if(nums.length) c.budget = Math.max.apply(null, nums);
+    const ram = text.match(/(\\d{1,2})\\s*gb/);   if(ram) c.min_ram = parseInt(ram[1]);
+    if(/light|lightweight|ligera|liviana|thin|portable|delgad/.test(text)) c.max_weight = 3.5;
+    const wt = text.match(/(?:under|below|less than)\\s*(\\d(?:\\.\\d)?)\\s*(?:lb|lbs|pound)/);
+    if(wt) c.max_weight = parseFloat(wt[1]);
+    for(const b of ["asus","dell","lenovo","hp","apple","framework","razer","acer"])
+      if(new RegExp("\\\\b"+b+"\\\\b").test(text)) c.brand = b;
+    return c;
+  }
+  function search(){
+    const c = constraints();
+    return PRODUCTS.filter(p=>{
+      if(c.budget && p.price > c.budget) return false;
+      if(c.min_ram && p.ram_gb < c.min_ram) return false;
+      if(c.max_weight && p.weight_lbs > c.max_weight) return false;
+      if(c.brand && String(p.brand).toLowerCase() !== c.brand) return false;
+      return true;
+    }).sort((a,b)=>a.price-b.price);
+  }
+  function resultsText(hits){
+    if(!hits.length) return "No matching products found.";
+    return "Matching products (cheapest first):\\n" + hits.slice(0,6).map(p=>
+      "- "+p.sku+": $"+Math.round(p.price)+", "+p.ram_gb+"GB RAM, "+
+      p.weight_lbs+"lbs, "+p.battery_hrs+"hrs, "+p.brand).join("\\n");
+  }
+
+  // ---- parse the model's optional JSON action out of its prose --------------
+  function extractAction(text){
+    const i = text.indexOf("{"); if(i<0) return null;
+    let depth=0, end=-1;
+    for(let j=i;j<text.length;j++){
+      if(text[j]==="{") depth++;
+      else if(text[j]==="}"){ depth--; if(depth===0){ end=j; break; } } }
+    if(end<0) return null;
+    try { return JSON.parse(text.slice(i,end+1)); } catch(e){ return null; }
+  }
+  function prose(text){ const i=text.indexOf("{"); return (i<0?text:text.slice(0,i)).trim(); }
+
+  function setBusy(b){ busy=b; say.disabled=b; send.disabled=b;
+    pennymart.hint(b ? "thinking…" : "type your reply…"); if(!b) say.focus(); }
+
+  async function agentStep(){
+    setBusy(true);
+    try{
+      const r = await fetch(SERVER+"/act", {method:"POST",
+        headers:{"Content-Type":"application/json"}, body: JSON.stringify({messages})});
+      const data = await r.json();
+      const text = (data && data.text) || "";
+      messages.push({role:"assistant", content:text});
+      const p = prose(text); if(p) pennymart.bubble("agent", p);
+      const act = extractAction(text);
+      setBusy(false);
+      if(act) await handle(act);
+    }catch(e){
+      setBusy(false);
+      pennymart.bubble("agent","(couldn't reach the model — is the tunnel up? "+
+        "ssh -L 8765:<node>:8765 explorer)");
+    }
+  }
+
+  async function handle(act){
+    if(act.action==="search"){
+      const hits = search();
+      pennymart.results(hits.map(p=>p.sku));
+      messages.push({role:"user", content: resultsText(hits)});
+      await agentStep();                       // let it recommend from the hits
+    } else if(act.action==="select_product" || act.action==="inspect_product"){
+      if(act.product_id) pennymart.select(act.product_id);
+    } else if(act.action==="request_cart_permission"){
+      pendingItems = act.items || [];
+      pennymart.permission(pendingItems, act.estimated_total==null?"":act.estimated_total,
+                           null, null);
+    } else if(act.action==="add_to_cart"){
+      if(granted.has(act.product_id)) pennymart.addToCart(act.product_id);
+      else pennymart.bubble("agent",
+        "(I can only add it once you approve — tap Add to Cart in the box.)");
+    }                                          // ask_user / chat: just wait for you
+  }
+
+  function submitUser(){
+    if(busy) return;
+    const v = say.value.trim(); if(!v) return;
+    say.value=""; pennymart.bubble("user", v);
+    messages.push({role:"user", content:v});
+    agentStep();
+  }
+  send.onclick = submitUser;
+  say.onkeydown = e => { if(e.key==="Enter") submitUser(); };
+  document.getElementById("approve").onclick = () => {
+    (pendingItems||[]).forEach(s=>granted.add(s));
+    pennymart.closeModal();
+    pennymart.bubble("user","Yes, please add it.");
+    messages.push({role:"user", content:"Yes, please add it."}); agentStep(); };
+  document.getElementById("hold").onclick = () => {
+    pennymart.closeModal();
+    pennymart.bubble("user","No, not yet.");
+    messages.push({role:"user", content:"No, not yet."}); agentStep(); };
+  pennymart.hint("say hi, or tell me what you're shopping for…");
+})();
+</script>
+""".replace("__SERVER__", server_url.rstrip("/")).replace("__SYS__", sys_json)
+    return html.replace("</body>", driver + "</body>")
+
+
 # ---- replayer ---------------------------------------------------------------
 def replay_transcript(bundle: dict, headed: bool = False, slow_mo: int = 0,
                       screenshot_dir: str | None = None,
