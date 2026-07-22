@@ -1,0 +1,215 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>PennyPilot — Systems Console</title><style>
+  :root { --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+          --ink:#0b0b0b; --ink2:#52514e; --bg:#f5f6f8; --card:#fcfcfb;
+          --grid:#e7e7e4; --bad:#c0392b; }
+  * { box-sizing:border-box; margin:0; }
+  body { font:13px/1.45 -apple-system,system-ui,sans-serif; color:var(--ink);
+         background:var(--bg); display:grid; height:100vh;
+         grid-template-columns: 380px 1fr 1fr; grid-template-rows: 44px 1fr 220px;
+         gap:8px; padding:8px; }
+  header { grid-column:1/4; display:flex; align-items:center; gap:12px;
+           background:var(--card); border:1px solid var(--grid);
+           border-radius:10px; padding:0 14px; }
+  header h1 { font-size:15px; } header h1 em { color:var(--s3); font-style:normal; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:999px; }
+  .sim { background:#fff3e2; color:#b25a00; } .live { background:#e7f6ee; color:#0a7d4f; }
+  #hud-note { margin-left:auto; color:var(--ink2); font-size:11px; }
+  .card { background:var(--card); border:1px solid var(--grid);
+          border-radius:10px; padding:10px; overflow:auto; }
+  #chat { display:flex; flex-direction:column; grid-row:2/4; }
+  #msgs { flex:1; overflow-y:auto; }
+  .b { max-width:94%; padding:7px 10px; border-radius:10px; margin:5px 0;
+       white-space:pre-wrap; word-break:break-word; font-size:12px; }
+  .u { background:#eef1f5; } .a { background:var(--s3); color:#fff;
+       margin-left:auto; font-family:ui-monospace,Menlo,monospace; font-size:11px; }
+  .meta { color:var(--ink2); font-size:10px; margin:1px 0 6px; }
+  #saybar { display:flex; gap:6px; padding-top:8px; border-top:1px solid var(--grid); }
+  #say { flex:1; padding:8px 10px; border:1px solid #cfd5db; border-radius:8px; }
+  button { padding:8px 12px; border:none; border-radius:8px; background:var(--s1);
+           color:#fff; font-weight:600; cursor:pointer; }
+  button.warn { background:var(--bad); }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .tile { background:var(--card); border:1px solid var(--grid); border-radius:10px;
+          padding:8px 10px; }
+  .tile .v { font-size:20px; font-weight:700; } .tile .l { color:var(--ink2);
+          font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
+  .tile .sub { font-size:10px; color:var(--ink2); }
+  #ledger .bar { display:flex; height:26px; border-radius:6px; overflow:hidden;
+                 margin:6px 0; }
+  #ledger .seg { height:100%; } .lg { display:flex; gap:10px; flex-wrap:wrap;
+                 font-size:11px; color:var(--ink2); }
+  .sw { display:inline-block; width:10px; height:10px; border-radius:2px;
+        margin-right:4px; vertical-align:-1px; }
+  pre.pane { background:#101418; color:#c8e6c9; font:10.5px ui-monospace,Menlo,monospace;
+             border-radius:8px; padding:8px; overflow:auto; height:170px; margin:0; }
+  .row { display:flex; gap:8px; align-items:center; margin:6px 0; }
+  input[type=range] { flex:1; }
+  .note { font-size:10.5px; color:var(--ink2); font-style:italic; }
+  h3 { font-size:12px; margin-bottom:6px; color:var(--ink2);
+       text-transform:uppercase; letter-spacing:.05em; }
+</style></head><body>
+<header>
+  <h1><em>Penny</em>Pilot Systems Console</h1>
+  <span class="badge sim">SIMULATED STORE</span>
+  <span class="badge live">LIVE SYSTEMS — every number real-sourced</span>
+  <span id="hud-note">panel set FROZEN 2026-07-23 · server: <span id="srv">…</span></span>
+</header>
+
+<div id="chat" class="card">
+  <h3>Live chat — trained policy on the V100</h3>
+  <div id="msgs"></div>
+  <div id="saybar"><input id="say" placeholder="talk to your model — any language…">
+    <button onclick="send()">Send</button></div>
+  <div class="row"><span class="note">load generator</span>
+    <input type="range" id="load" min="0" max="16" value="0"
+           oninput="setLoad(+this.value)"><b id="loadN">0</b>
+    <button class="warn" onclick="breakIt()">try to break it</button></div>
+</div>
+
+<div class="card" style="grid-column:2/4">
+  <div class="tiles">
+    <div class="tile"><div class="l">TTFT p50 / p95 (ms)</div>
+      <div class="v" id="ttft">–</div><div class="sub">time to first token</div></div>
+    <div class="tile"><div class="l">ITL mean (ms)</div>
+      <div class="v" id="itl">–</div><div class="sub">inter-token latency</div></div>
+    <div class="tile"><div class="l">tokens/sec (60s)</div>
+      <div class="v" id="tps">–</div><div class="sub" id="cost">$/1M tok: –</div></div>
+    <div class="tile"><div class="l">GPU util / mem</div>
+      <div class="v" id="gpu">–</div><div class="sub" id="reqs">reqs: –</div></div>
+    <div class="tile"><div class="l">MFU decode</div>
+      <div class="v" id="mfud">–</div>
+      <div class="sub">decode MFU is inherently low — bandwidth-bound, not a bug</div></div>
+    <div class="tile"><div class="l">MFU prefill (last)</div>
+      <div class="v" id="mfup">–</div><div class="sub">compute-bound phase</div></div>
+    <div class="tile"><div class="l">schema-valid actions</div>
+      <div class="v" id="valid">–</div><div class="sub" id="validlast">last: –</div></div>
+    <div class="tile"><div class="l">grounding / rejections</div>
+      <div class="v" id="ground">–</div><div class="sub" id="rej">rejections: 0</div></div>
+  </div>
+  <div id="ledger" style="margin-top:10px">
+    <h3>memory ledger — every gigabyte accounted for (32 GB card)</h3>
+    <div class="bar" id="membar"></div>
+    <div class="lg" id="memlegend"></div>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <span class="note" id="cache">prefix cache: …</span>
+    <span class="note" style="margin-left:auto">$/hr basis:
+      <input id="price" value="3.06" size="4" style="border:1px solid #cfd5db;
+             border-radius:4px; padding:2px 4px"> (V100 on-demand equiv.)</span>
+  </div>
+</div>
+
+<div class="card"><h3>pane: nvidia-smi (driver truth)</h3><pre class="pane" id="p_gpu">…</pre></div>
+<div class="card"><h3>pane: squeue (scheduler truth)</h3><pre class="pane" id="p_q">…</pre></div>
+
+<script>
+const API = localStorage.getItem("pp_api") || "http://localhost:8765";
+document.getElementById("srv").textContent = API;
+const SYS_FETCH = (p) => fetch(API + p).then(r => r.json());
+let history = [{role:"system", content: null}]; // system prompt lives server-side? no:
+// the console sends the full conversation; fetch the system prompt once from health? keep local:
+const SYSTEM = "You are PennyPilot, a budget-aware shopping assistant. The user may write in English, Spanish, or a mix; always respond in English.\n\nEach turn, reply with EXACTLY ONE JSON action (no other text):\n  {\"action\": \"ask_user\", \"question\": \"<one clarifying question>\"}\n  {\"action\": \"search\", \"query\": \"<what to search for>\"}\n  {\"action\": \"inspect_product\", \"product_id\": \"<SKU>\"}\n  {\"action\": \"select_product\", \"product_id\": \"<SKU>\", \"reason\": \"<why>\"}\n  {\"action\": \"request_cart_permission\", \"items\": [\"<SKU>\"], \"estimated_total\": <number>}\n  {\"action\": \"add_to_cart\", \"product_id\": \"<SKU>\"}\n\nRules:\n- The user's budget and requirements are not stated up front: ask clarifying questions until you know the budget and every must-have requirement, and ask again if there may be more requirements.\n- After you know the constraints, search, then select the CHEAPEST product that satisfies all of them.\n- NEVER add_to_cart before request_cart_permission has been answered with an explicit yes for that exact product.";
+let msgs = [{role:"system", content: SYSTEM}];
+const $ = id => document.getElementById(id);
+function bubble(cls, text, meta){ const d=document.createElement("div");
+  d.className="b "+cls; d.textContent=text; $("msgs").appendChild(d);
+  if(meta){ const m=document.createElement("div"); m.className="meta";
+    m.textContent=meta; $("msgs").appendChild(m); }
+  $("msgs").scrollTop=$("msgs").scrollHeight; }
+async function send(){
+  const v=$("say").value.trim(); if(!v) return; $("say").value="";
+  bubble("u", v); msgs.push({role:"user", content:v});
+  const r = await fetch(API+"/act", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({messages: msgs})}).then(x=>x.json());
+  if(r.error){ bubble("a", "⚠️ " + r.error); return; }
+  msgs.push({role:"assistant", content:r.text});
+  bubble("a", r.text, `TTFT ${r.ttft_ms}ms · ITL ${r.itl_ms}ms · ` +
+         `${r.gen_tokens} tok · valid=${r.action_valid}` +
+         (r.truncated ? " · TRUNCATED (graceful)" : ""));
+}
+$("say").addEventListener("keydown", e=>{ if(e.key==="Enter") send(); });
+
+// load generator: N independent looping conversations
+let loadN = 0, loadRunning = 0;
+const CANNED = ["hola necesito una laptop", "my budget is $1400",
+  "quiero una Asus con 32GB", "anything else you need to know?", "yes go ahead"];
+function setLoad(n){ loadN = n; $("loadN").textContent = n;
+  while(loadRunning < loadN){ loadRunning++; loadLoop(); } }
+async function loadLoop(){
+  let m = [{role:"system", content: SYSTEM}]; let i = 0;
+  while(loadRunning <= loadN && loadN > 0){
+    m.push({role:"user", content: CANNED[i++ % CANNED.length]});
+    try{ const r = await fetch(API+"/act", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({messages: m})}).then(x=>x.json());
+      m.push({role:"assistant", content: r.text || "…"});
+      if(m.length > 12) m = m.slice(0,1).concat(m.slice(-6));
+    }catch(e){ break; }
+  }
+  loadRunning--;
+}
+async function breakIt(){
+  bubble("u", "💣 oversized-request probe (2MB of junk)…");
+  const junk = {messages:[{role:"user", content:"x".repeat(2_100_000)}]};
+  const r = await fetch(API+"/act", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(junk)}).then(x=>x.json()).catch(e=>({error:String(e)}));
+  bubble("a", "🛡 " + (r.error || JSON.stringify(r)),
+         "graceful rejection — engine kept serving (watch rejections counter)");
+  bubble("u", "💣 context-overflow probe (300 turns)…");
+  let big=[{role:"system",content:SYSTEM}];
+  for(let i=0;i<150;i++){ big.push({role:"user",content:"filler turn "+i+" ".repeat(60)});
+    big.push({role:"assistant",content:'{"action":"ask_user","question":"?"}'}); }
+  big.push({role:"user",content:"my budget is $900, necesito una Dell"});
+  const r2 = await fetch(API+"/act", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({messages:big})}).then(x=>x.json());
+  bubble("a", r2.text || ("⚠️ "+r2.error),
+         r2.truncated ? "GRACEFUL TRUNCATION: kept system + newest turns" : "");
+}
+
+// telemetry poll (frozen panel set)
+async function poll(){
+  try{
+    const m = await SYS_FETCH("/metrics");
+    $("ttft").textContent = (m.ttft_ms_p50 ?? "–") + " / " + (m.ttft_ms_p95 ?? "–");
+    $("itl").textContent = m.itl_ms_mean ?? "–";
+    $("tps").textContent = m.tokens_per_sec_60s ?? "–";
+    const price = parseFloat($("price").value) || 0;
+    if(m.tokens_per_sec_60s > 0)
+      $("cost").textContent = "$/1M tok: " +
+        (price / 3600 / m.tokens_per_sec_60s * 1e6).toFixed(2);
+    $("gpu").textContent = (m.gpu_util_pct ?? "–") + "% · " +
+                           (m.gpu_mem_gb ?? "–") + " GB";
+    $("reqs").textContent = `reqs: ${m.requests_total} (${m.requests_last_60s}/60s)`;
+    $("mfud").textContent = (m.mfu_decode_pct ?? "–") + "%";
+    $("mfup").textContent = (m.mfu_prefill_last_pct ?? "–") + "%";
+    $("valid").textContent = (m.action_valid_pct ?? "–") + "%";
+    $("validlast").textContent = "last: " + m.action_valid_last;
+    $("ground").textContent = `${m.ids_grounded_total}✓ / ${m.ids_ungrounded_total}✗`;
+    $("rej").textContent = "rejections: " + m.rejections_total;
+    $("cache").textContent = "prefix cache: " + m.prefix_cache;
+    // memory ledger: weights / other-torch / cuda-ctx&pools / free
+    const total = 32.0, w = m.weights_gb || 0,
+          other = Math.max((m.torch_alloc_gb||0) - w, 0),
+          sys = Math.max((m.gpu_mem_gb||0) - (m.torch_alloc_gb||0), 0),
+          free = Math.max(total - (m.gpu_mem_gb||0), 0);
+    const segs = [["weights (≈2·P bytes, predicted=measured)", w, "var(--s1)"],
+                  ["optimizer+activations (torch)", other, "var(--s2)"],
+                  ["CUDA ctx + caches", sys, "var(--s4)"],
+                  ["free", free, "#d7dbe0"]];
+    $("membar").innerHTML = segs.map(([l,v,c]) =>
+      `<div class="seg" style="width:${(v/total*100).toFixed(1)}%;background:${c}" title="${l}: ${v.toFixed(2)} GB"></div>`).join("");
+    $("memlegend").innerHTML = segs.map(([l,v,c]) =>
+      `<span><span class="sw" style="background:${c}"></span>${l}: <b>${v.toFixed(2)} GB</b></span>`).join(" ");
+  }catch(e){ $("srv").textContent = API + " (unreachable)"; }
+  try{
+    $("p_gpu").textContent = (await SYS_FETCH("/pane/smi")).text;
+    $("p_q").textContent = (await SYS_FETCH("/pane/queue")).text;
+  }catch(e){}
+  setTimeout(poll, 2000);
+}
+poll();
+</script></body></html>

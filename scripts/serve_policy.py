@@ -168,15 +168,45 @@ def main() -> None:
             body = json.dumps(obj).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")  # local console
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def do_OPTIONS(self):  # noqa: N802 — CORS preflight for the console
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
 
         def do_GET(self):  # noqa: N802
             if self.path == "/health":
                 self._send(200, {"ok": True, "ckpt": args.ckpt})
             elif self.path == "/metrics":
                 self._send(200, metrics())
+            elif self.path.startswith("/pane/"):
+                # Read-only terminal preset panes (whitelist only — driver/
+                # scheduler-level truth beside the HUD, poll-based).
+                import subprocess
+                presets = {
+                    "gpu": ["nvidia-smi", "--query-gpu=utilization.gpu,"
+                            "memory.used,memory.total,temperature.gpu",
+                            "--format=csv,noheader"],
+                    "smi": ["nvidia-smi"],
+                    "queue": ["squeue", "-u", "madan.pa", "-o",
+                              "%.10i %.12j %.8T %.8M %R"],
+                }
+                key = self.path.split("/pane/", 1)[1]
+                if key not in presets:
+                    self._send(404, {"error": "unknown pane"})
+                    return
+                try:
+                    out = subprocess.run(presets[key], capture_output=True,
+                                         text=True, timeout=5).stdout
+                except Exception as e:  # noqa: BLE001
+                    out = f"(pane error: {e})"
+                self._send(200, {"pane": key, "text": out[-4000:]})
             else:
                 self._send(404, {"error": "unknown path"})
 
