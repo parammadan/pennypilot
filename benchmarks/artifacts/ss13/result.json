@@ -1,0 +1,21 @@
+{
+  "rungs": [
+    [
+      "A baseline\n(HF seq + ckpt-on)",
+      93.2
+    ],
+    [
+      "B +vLLM engine\n(seq, merged)",
+      42.699999999999996
+    ],
+    [
+      "C +batched-8\nrollouts",
+      15.100000000000001
+    ],
+    [
+      "D +ckpt-off\nupdate",
+      13.4
+    ]
+  ],
+  "speedup": 6.96
+}

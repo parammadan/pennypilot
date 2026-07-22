@@ -1,0 +1,108 @@
+{
+  "update_seconds": 11.61,
+  "chain_frac_of_update_cuda": 0.2004,
+  "chain_frac_of_iteration": 0.00842,
+  "kernel_justified": false,
+  "top_ops": [
+    {
+      "op": "aten::mm",
+      "self_cuda_ms": 1022.91,
+      "calls": 15880
+    },
+    {
+      "op": "void cutlass::Kernel<cutlass_70_tensorop_f16_s884gemm_relu_f16_128x128",
+      "self_cuda_ms": 385.19,
+      "calls": 912
+    },
+    {
+      "op": "aten::copy_",
+      "self_cuda_ms": 365.47,
+      "calls": 28596
+    },
+    {
+      "op": "aten::bmm",
+      "self_cuda_ms": 313.59,
+      "calls": 1808
+    },
+    {
+      "op": "aten::mul",
+      "self_cuda_ms": 237.38,
+      "calls": 14920
+    },
+    {
+      "op": "void cutlass::Kernel<cutlass_70_tensorop_f16_s884gemm_relu_f16_128x128",
+      "self_cuda_ms": 194.51,
+      "calls": 672
+    },
+    {
+      "op": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_k",
+      "self_cuda_ms": 176.45,
+      "calls": 13920
+    },
+    {
+      "op": "volta_fp16_s884gemm_fp16_128x256_ldg8_f2f_tn",
+      "self_cuda_ms": 148.67,
+      "calls": 448
+    },
+    {
+      "op": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_k",
+      "self_cuda_ms": 142.76,
+      "calls": 10777
+    },
+    {
+      "op": "volta_sgemm_64x64_nn",
+      "self_cuda_ms": 114.25,
+      "calls": 672
+    },
+    {
+      "op": "volta_sgemm_64x64_tn",
+      "self_cuda_ms": 109.56,
+      "calls": 588
+    },
+    {
+      "op": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunc",
+      "self_cuda_ms": 103.72,
+      "calls": 7568
+    },
+    {
+      "op": "Optimizer.step#AdamW.step",
+      "self_cuda_ms": 100.58,
+      "calls": 1
+    },
+    {
+      "op": "aten::add_",
+      "self_cuda_ms": 95.06,
+      "calls": 7584
+    },
+    {
+      "op": "aten::add",
+      "self_cuda_ms": 79.22,
+      "calls": 5864
+    },
+    {
+      "op": "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFu",
+      "self_cuda_ms": 66.69,
+      "calls": 4704
+    },
+    {
+      "op": "aten::addmm",
+      "self_cuda_ms": 57.63,
+      "calls": 1344
+    },
+    {
+      "op": "volta_fp16_s884gemm_fp16_128x64_ldg8_relu_f2f_tn",
+      "self_cuda_ms": 51.58,
+      "calls": 1288
+    },
+    {
+      "op": "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFu",
+      "self_cuda_ms": 49.59,
+      "calls": 896
+    },
+    {
+      "op": "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_imp",
+      "self_cuda_ms": 46.45,
+      "calls": 448
+    }
+  ]
+}
