@@ -10,12 +10,15 @@ POLICY=/scratch/madan.pa/pennypilot/rloo50_v2/policy
 mkdir -p benchmarks/artifacts/ss03 benchmarks/artifacts/ss04 benchmarks/artifacts/ss04b
 
 echo "=== SS3: prefix caching ==="
-VLLM_USE_V1=0 $VPY benchmarks/ss03_prefix_cache.py --sft-adapter "$POLICY" \
+# NOTE: no --sft-adapter — vLLM 0.7.3 LoRA Triton kernels abort on Volta
+# (mma->mma layout needs Ampere). SS3/SS4 measure engine physics (prefill
+# growth, decode batching), identical with/without an adapter; documented.
+VLLM_USE_V1=0 $VPY benchmarks/ss03_prefix_cache.py \
   --predicted "APC-off prefill grows with turns (turn9 >= 3x turn2); APC-on near-flat (turn9 <= 1.5x turn2)" \
   2>&1 | tee benchmarks/artifacts/ss03/run_${SLURM_JOB_ID:-x}.log || exit 1
 
 echo "=== SS4 + SS4b: concurrency + utilization ==="
-VLLM_USE_V1=0 $VPY benchmarks/ss04_concurrency.py --sft-adapter "$POLICY" \
+VLLM_USE_V1=0 $VPY benchmarks/ss04_concurrency.py \
   --predicted-ss4 "16-way >= 5x aggregate tok/s vs 1-way (decode batching amortizes weight reads)" \
   --predicted-ss4b "GPU util <35% sequential -> >=70% at 16-way; episodes/min >= 5x" \
   2>&1 | tee benchmarks/artifacts/ss04/run_${SLURM_JOB_ID:-x}.log || exit 1
