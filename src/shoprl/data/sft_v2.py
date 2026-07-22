@@ -38,14 +38,16 @@ from shoprl.env.catalog_env import SyntheticCatalogEnvironment
 from shoprl.env.scenario import Scenario, generate_hard_scenarios
 
 _BUDGET_QS = [
-    "What is your total budget?",
-    "How much are you looking to spend?",
-    "What's the price range you have in mind?",
+    "Happy to help! What's your total budget?",
+    "¡Hola! I can find you a great deal — how much are you looking to spend?",
+    "Sure thing! What price range do you have in mind?",
+    "Great, let's find the right one. What's your budget?",
 ]
 _FEATURE_QS = [
-    "Any must-have feature — RAM, battery, weight, or brand?",
-    "Are there any other requirements it absolutely must meet?",
-    "Anything else that's a hard requirement?",
+    "Got it! Any must-haves — RAM, battery life, weight, or a brand you prefer?",
+    "Noted 👍 Anything else it absolutely must have?",
+    "Perfect. Any other hard requirements I should know about?",
+    "Thanks! Is there anything else that's a dealbreaker for you?",
 ]
 _SEARCH_QS = ["laptops matching your budget and requirements, cheapest first",
               "matching options within budget", "best-value matching laptops"]

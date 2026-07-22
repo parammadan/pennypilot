@@ -62,6 +62,9 @@ _FORBIDDEN = re.compile(
 _REMOVE = re.compile(
     r"(?:remove|quita|quitar|drop|take\s+off)\s+"
     r"(?:the\s+|an?\s+|el\s+|la\s+|una?\s+)?([\w\sáéíóúüñ-]+?)(?=[.,;!?]|$)", re.I)
+_BRANDS = ("acer", "dell", "lenovo", "hp", "asus", "apple", "framework",
+            "razer")
+_BRAND_RE = re.compile(r"\b(" + "|".join(_BRANDS) + r")\b", re.IGNORECASE)
 _HOLD = re.compile(
     r"(?:do\s+not|don'?t)\s+add\s+anything|no\s+agregues\s+nada|not?\s+yet\b"
     r"|todavía\s+no|todavia\s+no", re.I)
@@ -74,7 +77,7 @@ class ExtractedInfo(BaseModel):
     number_of_children: int | None = None
     number_of_people: int | None = None
     required_categories: list[str] = Field(default_factory=list)
-    hard_constraints: dict[str, float] = Field(default_factory=dict)
+    hard_constraints: dict[str, float | str] = Field(default_factory=dict)
     owned_items: list[str] = Field(default_factory=list)
     forbidden_items: list[str] = Field(default_factory=list)
     removed_items: list[str] = Field(default_factory=list)
@@ -127,6 +130,9 @@ def extract_info(text: str) -> ExtractedInfo:
     m = _SPF.search(t)
     if m:
         out.hard_constraints["spf_minimum"] = float(m.group(1))
+    m = _BRAND_RE.search(t)
+    if m and not any(m.start() >= a and m.start() < b for a, b in negated_spans):
+        out.hard_constraints["brand"] = m.group(1).capitalize().replace("Hp", "HP")
     m = _RAM.search(t)
     if m:
         out.hard_constraints["min_ram"] = float(_num(m.group(1)))
@@ -151,7 +157,7 @@ def english_gloss(info: ExtractedInfo) -> str:
     if info.required_categories:
         parts.append("needs " + ", ".join(info.required_categories))
     for k, v in info.hard_constraints.items():
-        parts.append(f"{k}={v:g}")
+        parts.append(f"{k}={v:g}" if isinstance(v, (int, float)) else f"{k}={v}")
     if info.owned_items:
         parts.append("already has " + ", ".join(info.owned_items))
     if info.forbidden_items:

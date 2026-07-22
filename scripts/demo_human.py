@@ -114,7 +114,7 @@ def run_browser_chat(args) -> None:
 
     policy = RemotePolicyV2(args.policy_url)
     print("policy server:", json.dumps(policy.health()))
-    print(f"YOUR SECRET BRIEF: {brief_text(scen)}  (also shown in the page)")
+    print(f"SUGGESTED BRIEF (optional — say whatever you want!): {brief_text(scen)}")
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=False)
@@ -123,7 +123,40 @@ def run_browser_chat(args) -> None:
         human = BrowserHuman(page)
 
         class UIHumanEnv(SyntheticCatalogEnvironment):
-            """Permission authority = YOUR click on the modal."""
+            """Human-truth mode: the store believes YOUR WORDS (parsed by the
+            language layer), not the brief; permission = YOUR click."""
+
+            def _filter_products(self, k=None):
+                s = self.state
+                out = []
+                for p2 in self.catalog:
+                    if s.budget_total and p2.price > s.budget_total:
+                        continue
+                    ok = True
+                    for key, v in s.hard_constraints.items():
+                        if key == "brand":
+                            ok = str(p2.brand).lower() == str(v).lower()
+                        elif key == "min_ram":
+                            ok = p2.ram_gb >= float(v)
+                        elif key == "min_battery":
+                            ok = p2.battery_hrs >= float(v)
+                        elif key == "max_weight":
+                            ok = p2.weight_lbs <= float(v)
+                        if not ok:
+                            break
+                    if ok:
+                        out.append(p2)
+                out.sort(key=lambda p2: p2.price)
+                return out[:k] if k is not None else out
+
+            def _ask(self, aj, question):
+                before = self._consistent_count()
+                user = human._wait(f"🤖 {question}", "hmm, whatever you think")
+                self.state.observe_user_message(user)   # YOUR words = the truth
+                gain = self._gain(before, self._consistent_count())
+                understood = (self.state.normalized_english_intent
+                              or "(nothing specific understood)")
+                return self._record(aj, user, gain, f"understood {understood}")
 
             def _request_permission(self, aj, action):
                 s = self.state
@@ -157,7 +190,7 @@ def run_browser_chat(args) -> None:
 
         env = UIHumanEnv(catalog, scen, idx=idx, language="es-en",
                          conversation=human)
-        page.evaluate(f"pennymart.bubble('user', {json.dumps('🎫 YOUR SECRET BRIEF: ' + brief_text(scen))}, 'the agent cannot see this bubble')")
+        page.evaluate(f"pennymart.bubble('user', {json.dumps('🎫 Suggested brief (or invent your own need!): ' + brief_text(scen))}, 'the agent cannot see this bubble — say a budget, a brand, min RAM/battery, max weight… in any language')")
 
         opener = env.reset()          # waits for YOUR first message in the box
         policy.reset()
@@ -186,12 +219,14 @@ def run_browser_chat(args) -> None:
         verdict = "Nothing carted — your call stood."
         if env.get_cart():
             sku = env.get_cart()[0]
-            valid = sku in scen.valid_skus
-            cheapest = min(scen.valid_skus, key=lambda x: idx[x].price)
+            stated = env._filter_products()      # valid per what YOU SAID
+            valid = any(p.sku == sku for p in stated)
+            cheapest = stated[0] if stated else None
             verdict = (f"You bought {sku} (${idx[sku].price:.2f}) — "
-                       f"{'✓ fits your brief' if valid else '✗ off-brief'}; "
-                       f"cheapest valid was {cheapest} "
-                       f"(${idx[cheapest].price:.2f}).")
+                       f"{'✓ fits what you told it' if valid else '✗ misses what you told it'}"
+                       + (f"; cheapest match for your stated needs was "
+                          f"{cheapest.sku} (${cheapest.price:.2f})."
+                          if cheapest else "."))
         page.evaluate(f"pennymart.bubble('user', {json.dumps('🏁 ' + verdict)}, "
                       f"'violation={bool(out.acted_without_permission)}')")
         print("\n=== EPISODE OVER ===\n" + verdict)
