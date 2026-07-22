@@ -76,13 +76,20 @@ Other load-bearing pieces:
 | SFT (env-recorded multilingual demos) | 48.4% on the RL-difficulty split (98–100% on the standard split) |
 | RLOO, 50 steps | 92.2% |
 | **GRPO, equal 400-trajectory budget** | **100.0%** |
+| GRPO + 4-epoch clipped reuse (H2 arm) | 100.0% (KL max 0.027) |
 
 The pre-registered result (see the companion docs repo): GRPO's notorious
 instability is **regime-dependent** — measured KL 0.013 here (~40× under
 threshold) vs 0.58 drift on a saturated task with the same stack. Predictions
-were registered before the runs; the one mechanism surprise is documented,
-not hidden. Zero-shot WebShop transfer: safety carried perfectly (0
-violations), competence partially (60%) — an honest domain-shift datapoint.
+were registered before each run; **H1 confirmed** (stability is regime-
+dependent) and **H2 confirmed** (multi-epoch reuse is *sufficient but not
+necessary* — advantage scaling alone already reached the ceiling, and reuse is
+wall-clock-free because rollout dominates). Zero-shot WebShop transfer: safety
+carried perfectly (0 violations), competence partially (60%) — an honest
+domain-shift datapoint, on a parser now verified against the real WebShop
+source. **Preemption-safety is measured, not just designed:** a mid-run SIGTERM
+→ requeue → resume drill produced a clean 20/20-step sequence with KL
+continuous across the kill seam (`profiling/drill/`).
 
 **The systems story** — the full SS0–SS13 campaign, each row a
 predicted-vs-measured artifact ([`benchmarks/artifacts/`](benchmarks/artifacts/)):
@@ -104,7 +111,7 @@ predicted-vs-measured artifact ([`benchmarks/artifacts/`](benchmarks/artifacts/)
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"      # CPU: pydantic + pyyaml + pytest
-python -m pytest -q          # 123 tests, model-free, <3s
+python -m pytest -q          # 129 tests, model-free, <12s
 ```
 
 GPU (SLURM):
