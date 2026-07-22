@@ -67,18 +67,36 @@ Other load-bearing pieces:
 
 ## Measured on the V100 (nothing estimated)
 
-- **Precision:** fp16 + GradScaler **3455 tok/s** vs bf16-emulated 810 tok/s
-  (**4.27×**, both numerically stable, peak 7.34 GB) → fp16 pinned. Unscaled
-  fp16 diverges at step 1 — measured, which is why the scaler is not optional.
-- **Training loop:** end-to-end multi-turn RLOO validated on-cluster — 50
-  observed steps, KL to the frozen reference bounded ≤ 0.0035, clarifying and
-  permission behaviour preserved throughout (no "RL kills asking" collapse).
-- **Memory:** 1.5B full fine-tune fits (18.6 GB fixed footprint; OOM wall
-  ~seq 3072 without FlashAttention on Volta); LoRA is the working default for
-  engine-coexistence and adapter hot-swap.
-- **Task hardness:** base success 12.5% (n=64), violation rate 0, ask rate 1.0
-  — the base model asks but can't drive the action loop to a valid cheapest
-  pick; exactly the gap SFT+RL should close. Artifacts: [`profiling/gate/`](profiling/gate/).
+**The learning story** — every arm violation-free, every number held-out:
+
+| Stage | Task success (es-en hard split) |
+|---|---|
+| Base model (hardness gate) | 12.5% |
+| SFT (env-recorded multilingual demos) | 48.4% on the RL-difficulty split (98–100% on the standard split) |
+| RLOO, 50 steps | 92.2% |
+| **GRPO, equal 400-trajectory budget** | **100.0%** |
+
+The pre-registered result (see the companion docs repo): GRPO's notorious
+instability is **regime-dependent** — measured KL 0.013 here (~40× under
+threshold) vs 0.58 drift on a saturated task with the same stack. Predictions
+were registered before the runs; the one mechanism surprise is documented,
+not hidden. Zero-shot WebShop transfer: safety carried perfectly (0
+violations), competence partially (60%) — an honest domain-shift datapoint.
+
+**The systems story** — the full SS0–SS13 campaign, each row a
+predicted-vs-measured artifact ([`benchmarks/artifacts/`](benchmarks/artifacts/)):
+
+- Rollout generation = **95.8%** of an RL iteration (3 consistent profiles).
+- **Waterfall: 93.2 s → 13.4 s per iteration (6.96×)** — batched lockstep
+  rollouts (4.98× tokens, 6.4× episodes/min), merge-at-sync vLLM serving
+  (2.3× alone; also the fix for Volta's broken LoRA kernels), ckpt-off
+  updates (1.48× at batch ≤ 2).
+- **Measured-out, with mechanisms:** engine swap alone (1.06×), prefix
+  caching (Volta-gated *and* ≤7%/turn at our lengths), packing (8.2% waste),
+  prefetch (0.2%), and a Triton kernel deliberately **not** written (the
+  profiled ceiling was 0.84% of the iteration).
+- Precision: fp16+GradScaler **4.27×** over bf16-emulated, both stable —
+  unscaled fp16 diverges at step 1, which is why the scaler isn't optional.
 
 ## Quickstart
 
@@ -100,24 +118,29 @@ python scripts/vllm_smoke.py              # vLLM-on-Volta candidate smoke (own v
 ## Roadmap (gated — each stage must pass before the next)
 
 1. Environment + deterministic oracle + vertical slice ✅
-2. SFT warmup (multilingual demos, corrections, permission edges) ← **next**
-3. RLOO training (bring-up algorithm)
-4. GRPO comparison at equal rollout budget (pre-registered hypotheses)
-5. WebShop adapter evaluation on unseen products
-6. Visible-Chromium demo: live execution + deterministic replay
-7. Profiling campaign: baseline trace → vLLM rollout → prefix caching →
-   concurrency → memory → packing → (Triton kernel only if the re-profile
-   shows the hotspot). Rule: **no optimization without a measurement.**
+2. SFT warmup (multilingual demos, corrections, permission edges) ✅
+3. RLOO training (bring-up algorithm) ✅
+4. GRPO comparison at equal rollout budget (pre-registered hypotheses) ✅
+5. WebShop adapter evaluation on unseen products ✅ · Chromium demo: replay ✅
+   live mode ✅ (live *session* with the trained policy: scheduled on demand)
+6. Profiling campaign SS0–SS13 ✅ — **14/14 rows measured**, rule held:
+   no optimization without a measurement.
+
+Watch it: `python scripts/demo_browser.py --transcript demos/trained_es-en.json --headed`
 
 ## Current limitations (honest)
 
-- No trained-model results yet — the numbers above are platform and
-  task-design measurements; SFT/RL results land as they are produced.
 - Scripted user simulator has cosmetic phrasing quirks (a frozen-LLM user
   model slots in behind the same seam later).
 - Mid-flow corrections that change ground truth (budget revisions) are
   deferred pending scenario-schema support — not faked.
-- WebShop adapter and browser demo not started; vLLM version pin in progress.
+- "WebShop" evaluation uses the dialect-faithful in-repo backend; the real
+  princeton-nlp instance remains a documented backend plug-in.
+- vLLM on Volta: LoRA serving and prefix caching are hardware-gated (Triton
+  kernels need Ampere) — worked around via merge-at-sync, documented with
+  the asserts.
+- H2's registered mechanism (multi-epoch reuse) is untested — our GRPO won
+  via advantage scaling; the reuse arm is a documented follow-up.
 
 Safety by scope: no real purchases, no real-site scraping, no CAPTCHA/auth
 bypass — the storefront is synthetic and the browser is a projection.
