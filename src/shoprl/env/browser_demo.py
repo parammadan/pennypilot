@@ -69,15 +69,36 @@ def render_storefront_html(catalog,
   #search { flex:0 0 320px; padding:8px 10px; border:1px solid #cfd5db;
             border-radius:8px; font-size:13px; }
   #cart { font-weight:600; } #cart b { color:var(--accent); }
-  #grid { padding:16px; display:grid; gap:12px; overflow-y:auto;
-          grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
-  .card { background:#fff; border:1px solid #e3e6ea; border-radius:12px;
-          padding:12px; transition:box-shadow .2s,border-color .2s; }
-  .card.hit { border-color:var(--accent); box-shadow:0 4px 14px rgba(10,125,79,.18); }
-  .card.selected { outline:3px solid var(--accent); }
-  .card h3 { font-size:13px; } .card .price { font-size:17px; font-weight:700;
-             color:var(--accent); margin:4px 0; }
-  .card .specs { color:var(--muted); font-size:12px; }
+  #grid { padding:16px; display:grid; gap:14px; overflow-y:auto;
+          grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+          align-content:start; background:var(--bg); }
+  .card { background:#fff; border:1px solid #e3e6ea; border-radius:14px;
+          padding:0; overflow:hidden; transition:box-shadow .18s,transform .18s,
+          border-color .18s; cursor:default; display:flex; flex-direction:column; }
+  .card:hover { box-shadow:0 6px 20px rgba(20,26,34,.10); transform:translateY(-2px); }
+  .card .thumb { height:120px; display:flex; align-items:center; justify-content:center;
+                 background:linear-gradient(135deg,#f3f5f8,#e9edf2); position:relative; }
+  .card .thumb svg { width:96px; height:64px; }
+  .card .body { padding:11px 12px 13px; display:flex; flex-direction:column; gap:3px; }
+  .card.hit { border-color:var(--accent); box-shadow:0 6px 18px rgba(10,125,79,.16); }
+  .card.hit .thumb { background:linear-gradient(135deg,#e7f6ee,#d5efe0); }
+  .card.selected { outline:3px solid var(--accent); outline-offset:-1px; }
+  .card h3 { font-size:13px; line-height:1.25; }
+  .card .price { font-size:19px; font-weight:800; color:var(--ink); }
+  .card .rate { font-size:11px; color:var(--s4-star,#e6a400); letter-spacing:1px; }
+  .card .rate span { color:var(--muted); letter-spacing:0; margin-left:4px; }
+  .card .pills { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+  .card .pill { font-size:10.5px; background:#f0f2f5; color:#41474e;
+                border-radius:6px; padding:2px 6px; }
+  .card .sku { font-size:10px; color:#a4abb3; margin-top:5px; }
+  .badge-best { position:absolute; top:8px; left:8px; background:var(--accent);
+                color:#fff; font-size:10px; font-weight:700; padding:3px 7px;
+                border-radius:999px; box-shadow:0 2px 6px rgba(10,125,79,.3); }
+  .card .buy { margin-top:8px; padding:6px; border:1px solid #cfd5db;
+               border-radius:8px; background:#fafbfc; color:var(--muted);
+               font-size:11px; text-align:center; }
+  .card.selected .buy { background:var(--accent); color:#fff; border:none;
+               font-weight:600; }
   #banner { display:none; padding:10px 18px; background:#e7f6ee;
             color:#0a7d4f; font-weight:600; }
   #modal { display:none; position:fixed; inset:0; background:rgba(20,26,34,.45);
@@ -108,20 +129,48 @@ def render_storefront_html(catalog,
 const PRODUCTS = __PRODUCTS__;
 const grid = document.getElementById("grid");
 const chat = document.getElementById("msgs");
-function card(p){ return `<div class="card" data-sku="${p.sku}"><h3>${p.name}</h3>
-  <div class="price">$${p.price.toFixed(2)}</div>
-  <div class="specs">${p.ram_gb!==undefined?`${p.ram_gb}GB RAM · ${p.weight_lbs} lbs · ${p.battery_hrs} h · ${p.brand}`:""}</div>
-  <div class="specs">${p.sku}</div></div>`; }
-function show(list){ grid.innerHTML = list.map(card).join(""); }
+// Deterministic per-brand tint (stylized thumbnail — an honest icon, not a
+// faked product photo; real product images are unavailable for this data).
+const BRAND_HUE = {Asus:"#2a78d6", Dell:"#0a7d4f", Lenovo:"#c0392b",
+  HP:"#00838f", Apple:"#555", Framework:"#eb6834", Razer:"#3fae29",
+  Acer:"#8e44ad"};
+function laptopSVG(p){
+  const c = BRAND_HUE[p.brand] || "#6b7785";
+  return `<svg viewBox="0 0 120 80"><rect x="24" y="12" width="72" height="46" rx="4"
+    fill="#fff" stroke="${c}" stroke-width="3"/><rect x="30" y="18" width="60"
+    height="34" rx="2" fill="${c}" opacity="0.16"/><path d="M14 62 h92 l-6 8 h-80 z"
+    fill="${c}" opacity="0.85"/><rect x="52" y="62" width="16" height="3"
+    rx="1.5" fill="#fff" opacity="0.7"/></svg>`; }
+function stars(p){
+  // deterministic pseudo-rating from specs (battery+ram, lighter=better)
+  const s = 3.4 + ((p.battery_hrs||10)/20)*0.9 + ((p.ram_gb||8)>=32?0.5:0)
+            + (0.4 - ((p.weight_lbs||4)-2)/12);
+  const r = Math.max(3.2, Math.min(5, s));
+  const full = Math.round(r);
+  return `<div class="rate">${"★".repeat(full)}${"☆".repeat(5-full)}`+
+         `<span>${r.toFixed(1)}</span></div>`; }
+function pills(p){
+  if(p.ram_gb===undefined) return "";
+  return `<div class="pills"><span class="pill">${p.ram_gb}GB</span>`+
+    `<span class="pill">${p.weight_lbs} lb</span>`+
+    `<span class="pill">${p.battery_hrs}h</span>`+
+    `<span class="pill">${p.brand}</span></div>`; }
+function card(p, best){ return `<div class="card" data-sku="${p.sku}">
+  <div class="thumb">${laptopSVG(p)}${best?'<div class="badge-best">best match</div>':''}</div>
+  <div class="body"><h3>${p.name}</h3>${stars(p)}
+    <div class="price">$${p.price.toFixed(2)}</div>${pills(p)}
+    <div class="sku">${p.sku}</div><div class="buy">Add to cart</div></div></div>`; }
+function show(list, bestSku){ grid.innerHTML = list.map(p=>card(p, p.sku===bestSku)).join(""); }
 window.pennymart = {
   all(){ show(PRODUCTS); },
   bubble(role, text, note){ const d=document.createElement("div");
     d.className="bubble "+role; d.textContent=text; chat.appendChild(d);
     if(note){ const n=document.createElement("div"); n.className="note";
       n.textContent=note; chat.appendChild(n);} chat.scrollTop=chat.scrollHeight; },
-  results(skus){ const set=new Set(skus);
-    const hits=PRODUCTS.filter(p=>set.has(p.sku));
-    show(hits); hits.forEach(p=>document.querySelector(`[data-sku="${p.sku}"]`)
+  results(skus){ const by={}; PRODUCTS.forEach(p=>by[p.sku]=p);
+    const hits=skus.map(s=>by[s]).filter(Boolean);   // preserve cheapest-first order
+    show(hits, skus[0]);                             // first = cheapest = best match
+    hits.forEach(p=>document.querySelector(`[data-sku="${p.sku}"]`)
       .classList.add("hit")); },
   select(sku){ const el=document.querySelector(`[data-sku="${sku}"]`);
     if(el){ el.classList.add("selected"); el.scrollIntoView({block:"center",behavior:"smooth"}); } },
