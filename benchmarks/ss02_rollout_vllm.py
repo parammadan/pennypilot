@@ -47,7 +47,11 @@ def main() -> None:
     from shoprl.profiling.bench_common import GenMeter, vllm_agent_fn
     from shoprl.train.algo import rollout_v2
 
-    tok = AutoTokenizer.from_pretrained(args.sft_adapter or args.model)
+    # Load the tokenizer from the BASE model, never the adapter dir: adapter
+    # tokenizer configs are written by transformers 5.x (trainer env) and this
+    # venv's pinned 4.49 can't parse them ('list' object has no attribute
+    # 'keys' on extra_special_tokens). The adapter doesn't alter the tokenizer.
+    tok = AutoTokenizer.from_pretrained(args.model)
     llm = LLM(model=args.model, dtype="float16",
               gpu_memory_utilization=args.gpu_mem_util,
               enable_prefix_caching=args.prefix_caching,
