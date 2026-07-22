@@ -190,7 +190,7 @@ def run_browser_chat(args) -> None:
 
         env = UIHumanEnv(catalog, scen, idx=idx, language="es-en",
                          conversation=human)
-        page.evaluate(f"pennymart.bubble('user', {json.dumps('🎫 Suggested brief (or invent your own need!): ' + brief_text(scen))}, 'the agent cannot see this bubble — say a budget, a brand, min RAM/battery, max weight… in any language')")
+        page.evaluate(f"pennymart.demoHint({json.dumps(brief_text(scen))})")
 
         opener = env.reset()          # waits for YOUR first message in the box
         policy.reset()

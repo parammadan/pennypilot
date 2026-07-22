@@ -77,7 +77,16 @@ def render_storefront_html(catalog,
   #subnav .sim { color:#febd69; }
   #resultbar { padding:10px 18px 4px; color:var(--muted); font-size:13px; }
   #resultbar b { color:var(--ink); }
+  #hintbar { display:none; margin:8px 16px 0; padding:7px 12px; font-size:12px;
+             background:#fff8e5; border:1px dashed #e0c86a; border-radius:6px;
+             color:#6a5a1a; }
+  #hintbar b { color:#4a3f10; }
   #grid { padding:6px 12px 16px; overflow-y:auto; }
+  #empty { display:flex; flex-direction:column; align-items:center;
+           justify-content:center; height:70%; color:var(--muted); gap:10px;
+           text-align:center; padding:40px; }
+  #empty .big { font-size:38px; } #empty h2 { font-size:17px; color:var(--ink);
+           font-weight:600; } #empty p { max-width:420px; }
   .card { background:#fff; border-bottom:1px solid #e7e7e7; padding:16px;
           display:grid; grid-template-columns:200px 1fr; gap:18px; }
   .card .thumb { height:170px; display:flex; align-items:center; justify-content:center;
@@ -128,6 +137,7 @@ def render_storefront_html(catalog,
   <div id="subnav"><span>All</span><span>Laptops</span><span>Deals</span>
     <span class="sim">● SIMULATED — no real purchases, stylized images</span></div>
   <div id="banner"></div>
+  <div id="hintbar"></div>
   <div id="resultbar"></div>
   <div id="grid"></div>
 </main>
@@ -179,6 +189,15 @@ function show(list, bestSku){ grid.innerHTML = list.map(p=>card(p, p.sku===bestS
 const rbar = document.getElementById("resultbar");
 window.pennymart = {
   all(){ show(PRODUCTS); rbar.innerHTML = `Showing <b>${PRODUCTS.length}</b> products`; },
+  welcome(){ grid.innerHTML = `<div id="empty"><div class="big">🛍️</div>
+    <h2>Your shopping assistant is ready</h2>
+    <p>Tell it what you're looking for in the chat on the left — a budget,
+    a brand, how much RAM. It'll ask what it needs, then find the
+    cheapest option that fits and show it here.</p></div>`;
+    rbar.textContent = ""; },
+  demoHint(text){ const h=document.getElementById("hintbar");
+    h.innerHTML = `🎫 <b>Demo hint (only you see this — the assistant does NOT):</b> `
+      + text + ` — reveal these only when it asks.`; h.style.display="block"; },
   bubble(role, text, note){ const d=document.createElement("div");
     d.className="bubble "+role; d.textContent=text; chat.appendChild(d);
     if(note){ const n=document.createElement("div"); n.className="note";
@@ -217,7 +236,7 @@ window.__human = null;
   document.getElementById("hold").addEventListener("click",
     () => { window.__human = "__no__"; });
 })();
-pennymart.all();
+pennymart.welcome();
 </script></body></html>""".replace("__TITLE__", title).replace("__PRODUCTS__", products)
 
 
