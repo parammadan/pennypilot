@@ -1,0 +1,19 @@
+{
+  "peak_nvml_gb": 10.77,
+  "peak_torch_gb": 7.92,
+  "step_metrics": {
+    "algo": "rloo",
+    "reward_mean": 1.2815370000000001,
+    "reward_std": 0.05179524734953978,
+    "adv_abs_mean": 0.05980800000000003,
+    "kl_mean": 0.0,
+    "kl_max": 0.0,
+    "value_mean": 1.0,
+    "violation_rate": 0.0,
+    "ask_rate": 1.0,
+    "invalid_actions_mean": 0,
+    "grad_norm": 0.02933359146118164,
+    "scaler_scale": 65536.0,
+    "group_size": 4
+  }
+}

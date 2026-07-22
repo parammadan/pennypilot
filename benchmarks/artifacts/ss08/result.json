@@ -1,0 +1,19 @@
+{
+  "lora": {
+    "method": "lora",
+    "trainable_params_m": 18.5,
+    "weights_gb": 2.95,
+    "optimizer_state_gb": 0.138,
+    "post_step_allocated_gb": 3.76,
+    "backward_peak_gb": 7.19
+  },
+  "full": {
+    "method": "full",
+    "trainable_params_m": 1543.7,
+    "weights_gb": 5.75,
+    "optimizer_state_gb": 5.751,
+    "post_step_allocated_gb": 14.98,
+    "backward_peak_gb": 17.85
+  },
+  "optimizer_ratio": 42
+}

@@ -1,0 +1,18 @@
+{
+  "on": {
+    "grad_checkpointing": true,
+    "steps": 20,
+    "step_seconds": 0.601,
+    "tokens_per_sec": 3028.1,
+    "peak_mem_gb": 7.34
+  },
+  "off": {
+    "grad_checkpointing": false,
+    "steps": 20,
+    "step_seconds": 0.406,
+    "tokens_per_sec": 4485.7,
+    "peak_mem_gb": 16.36
+  },
+  "mem_ratio_off_over_on": 2.23,
+  "speed_ratio_off_over_on": 1.48
+}
