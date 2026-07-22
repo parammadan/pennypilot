@@ -42,7 +42,9 @@ def stage_merge(args) -> None:
     base = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float16)
     merged = PeftModel.from_pretrained(base, args.sft_adapter).merge_and_unload()
     merged.save_pretrained(args.merged_dir)
-    AutoTokenizer.from_pretrained(MODEL).save_pretrained(args.merged_dir)
+    # Deliberately NO tokenizer in merged_dir: this env's transformers 5.x
+    # writes configs the vLLM venv's 4.49 cannot parse (CHALLENGES #23) — the
+    # engine gets tokenizer=MODEL (base, old-format cache) instead.
     print(f"[SS13:merge] merged policy -> {args.merged_dir}")
 
 
@@ -87,7 +89,7 @@ def stage_rollout_vllm(args) -> None:
     from shoprl.train.batch_rollout import batched_rollouts
     catalog, idx, scen = _scenario()
     tok = AutoTokenizer.from_pretrained(MODEL)
-    llm = LLM(model=args.merged_dir, dtype="float16",
+    llm = LLM(model=args.merged_dir, tokenizer=MODEL, dtype="float16",
               gpu_memory_utilization=0.45, enforce_eager=True)
     sp = SamplingParams(temperature=1.0, top_p=0.95, max_tokens=64)
 
