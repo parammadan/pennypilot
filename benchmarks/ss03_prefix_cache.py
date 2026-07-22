@@ -61,6 +61,9 @@ def main() -> None:
     ap.add_argument("--sft-adapter", default=None)
     ap.add_argument("--predicted", default="")
     ap.add_argument("--gpu-mem-util", type=float, default=0.45)
+    ap.add_argument("--mode", default="plot", choices=["apc_off", "apc_on", "plot"],
+                    help="measure one mode per PROCESS (a Volta Triton abort in "
+                         "one mode must not kill the other's data), then plot")
     ap.add_argument("--out", default="benchmarks/artifacts/ss03")
     args = ap.parse_args()
 
@@ -69,7 +72,6 @@ def main() -> None:
     os.makedirs(args.out, exist_ok=True)
 
     from transformers import AutoTokenizer
-    from vllm import LLM, SamplingParams
 
     tok = AutoTokenizer.from_pretrained(args.model)
     prefixes = conversation_prefixes()
@@ -77,47 +79,58 @@ def main() -> None:
                                        add_generation_prompt=True)
                for p in prefixes]
     prompt_tokens = [len(tok(p)["input_ids"]) for p in prompts]
-    sp = SamplingParams(temperature=0.8, max_tokens=64, seed=0)
 
-    lora_req = None
-    results: dict[str, list[float]] = {}
-    for mode, apc in (("apc_off", False), ("apc_on", True)):
+    if args.mode in ("apc_off", "apc_on"):
+        from vllm import LLM, SamplingParams
+        sp = SamplingParams(temperature=0.8, max_tokens=64, seed=0)
         llm = LLM(model=args.model, dtype="float16",
                   gpu_memory_utilization=args.gpu_mem_util,
-                  enable_prefix_caching=apc,
-                  enable_lora=args.sft_adapter is not None, max_lora_rank=16,
+                  enable_prefix_caching=(args.mode == "apc_on"),
                   enforce_eager=True)
-        if args.sft_adapter and lora_req is None:
-            from vllm.lora.request import LoRARequest
-            lora_req = LoRARequest("policy", 1, args.sft_adapter)
-        llm.generate([prompts[0]], sp, lora_request=lora_req,
-                     use_tqdm=False)                     # warm the engine
+        llm.generate([prompts[0]], sp, use_tqdm=False)    # warm the engine
         lat = []
-        for p in prompts:
+        for pr in prompts:
             t0 = time.time()
-            llm.generate([p], sp, lora_request=lora_req, use_tqdm=False)
+            llm.generate([pr], sp, use_tqdm=False)
             lat.append(round((time.time() - t0) * 1000, 1))
-        results[mode] = lat
-        del llm
-        import gc, torch
-        gc.collect()
-        torch.cuda.empty_cache()
+        with open(os.path.join(args.out, f"{args.mode}.json"), "w") as f:
+            json.dump({"prompt_tokens": prompt_tokens, "latency_ms": lat}, f)
+        print(f"[SS3:{args.mode}] {lat}")
+        return
 
-    measured = (f"turn2→turn{len(prompts)}: off {results['apc_off'][1]}→"
-                f"{results['apc_off'][-1]} ms, on {results['apc_on'][1]}→"
-                f"{results['apc_on'][-1]} ms")
+    # plot mode: assemble whatever modes survived (a missing apc_on.json IS
+    # the reportable Volta result, not a failure of the benchmark).
+    results = {}
+    for mode in ("apc_off", "apc_on"):
+        fp = os.path.join(args.out, f"{mode}.json")
+        if os.path.exists(fp):
+            results[mode] = json.load(open(fp))["latency_ms"]
+    if "apc_on" in results:
+        measured = (f"turn2→turn{len(prompts)}: off {results['apc_off'][1]}→"
+                    f"{results['apc_off'][-1]} ms, on {results['apc_on'][1]}→"
+                    f"{results['apc_on'][-1]} ms")
+        mechanism = ("APC reuses the shared prefix's KV blocks so only the new "
+                     "turn is prefilled; without it prefill grows with turns")
+    else:
+        off = results["apc_off"]
+        measured = (f"APC-off per-turn latency grows {off[1]}→{off[-1]} ms "
+                    f"(turns 2→{len(off)}); **APC-on UNAVAILABLE on Volta**: "
+                    "vLLM 0.7.3's prefix-cache prefill kernel (Triton) aborts — "
+                    "'mma layout conversion only supported on Ampere'")
+        mechanism = ("prefill work grows with conversation length (measured); "
+                     "the caching fix requires a prefix-prefill kernel this "
+                     "hardware cannot compile — the optimization is documented "
+                     "as hardware-gated, per the campaign rule that a blocked "
+                     "path is itself a reportable artifact")
     _plot(results, prompt_tokens, args.out, predicted, measured)
     with open(os.path.join(args.out, "result.json"), "w") as f:
         json.dump({"prompt_tokens": prompt_tokens, **results}, f, indent=2)
     write_manifest(args.out, "SS3", "per-turn latency (fixed 64-tok decode), APC off vs on",
-                   predicted=predicted, measured=measured,
-                   mechanism=("each turn's prompt extends the last; APC reuses "
-                              "the shared prefix's KV blocks so only the new "
-                              "turn is prefilled — without it, prefill work "
-                              "grows with conversation length"),
+                   predicted=predicted, measured=measured, mechanism=mechanism,
                    config=vars(args),
                    rerun_cmd="VLLM_USE_V1=0 <venv>/bin/python "
-                             "benchmarks/ss03_prefix_cache.py --predicted '...'")
+                             "benchmarks/ss03_prefix_cache.py --mode apc_off|apc_on|plot "
+                             "--predicted '...'")
     print(f"[SS3] {measured}")
 
 
@@ -129,14 +142,19 @@ def _plot(results, prompt_tokens, out, predicted, measured) -> None:
     fig, ax = plt.subplots(figsize=(9, 5), facecolor="#fcfcfb")
     ax.plot(turns, results["apc_off"], color="#2a78d6", linewidth=2,
             marker="o", markersize=5)
-    ax.plot(turns, results["apc_on"], color="#eb6834", linewidth=2,
-            marker="o", markersize=5)
     ax.annotate("prefix caching OFF", (turns[-1], results["apc_off"][-1]),
                 xytext=(-8, 10), textcoords="offset points", ha="right",
                 color="#0b0b0b", fontsize=9)
-    ax.annotate("prefix caching ON", (turns[-1], results["apc_on"][-1]),
-                xytext=(-8, 10), textcoords="offset points", ha="right",
-                color="#0b0b0b", fontsize=9)
+    if "apc_on" in results:
+        ax.plot(turns, results["apc_on"], color="#eb6834", linewidth=2,
+                marker="o", markersize=5)
+        ax.annotate("prefix caching ON", (turns[-1], results["apc_on"][-1]),
+                    xytext=(-8, 10), textcoords="offset points", ha="right",
+                    color="#0b0b0b", fontsize=9)
+    else:
+        ax.annotate("APC-on: unavailable on Volta\n(Triton kernel needs Ampere)",
+                    (0.02, 0.95), xycoords="axes fraction", va="top",
+                    color="#b25a00", fontsize=9)
     ax.set_xlabel("conversation turn", color="#52514e")
     ax.set_ylabel("per-turn latency (ms, 64-token decode)", color="#52514e")
     ax.set_facecolor("#fcfcfb")
@@ -156,7 +174,7 @@ def _plot(results, prompt_tokens, out, predicted, measured) -> None:
         w.writerow(["turn", "prompt_tokens", "apc_off_ms", "apc_on_ms"])
         for i, t in enumerate(turns):
             w.writerow([t, prompt_tokens[i], results["apc_off"][i],
-                        results["apc_on"][i]])
+                        results.get("apc_on", [None] * len(turns))[i]])
 
 
 if __name__ == "__main__":

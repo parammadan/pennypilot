@@ -27,7 +27,10 @@ def main() -> None:
     ap.add_argument("--predicted-ss4b", default="")
     ap.add_argument("--gpu-mem-util", type=float, default=0.45)
     ap.add_argument("--levels", type=int, nargs="+", default=[1, 4, 16])
-    ap.add_argument("--prefix-caching", action="store_true", default=True)
+    ap.add_argument("--prefix-caching", action="store_true", default=False)
+    ap.add_argument("--no-prefix-caching", dest="prefix_caching",
+                    action="store_false",
+                    help="APC prefill kernel aborts on Volta (CHALLENGES #26)")
     ap.add_argument("--out4", default="benchmarks/artifacts/ss04")
     ap.add_argument("--out4b", default="benchmarks/artifacts/ss04b")
     args = ap.parse_args()
@@ -109,7 +112,7 @@ def main() -> None:
                         os.path.join(args.out4, f"ss04_timeline_n{n}.png"),
                         f"SS4 — {n} concurrent episodes | util mean "
                         f"{row['gpu_util_mean']}% | {row['agg_tokens_per_sec']} tok/s",
-                        subtitle="lockstep batched rollouts, vLLM 0.7.3, APC on")
+                        subtitle=f"lockstep batched rollouts, vLLM 0.7.3, APC {'on' if args.prefix_caching else 'off (Volta-gated)'}")
 
     by_n = {r["n"]: r for r in rows}
     speedup = round(by_n[16]["agg_tokens_per_sec"] /
