@@ -44,7 +44,7 @@ The policy emits **structured JSON actions** — never raw browser selectors:
 ```
 
 Environment adapters translate them: a **synthetic catalog environment**
-(training), a WebShop adapter (unseen-product eval, planned), and a Playwright
+(training), a WebShop adapter (unseen-product eval — dialect-faithful backend; real instance in progress), and a Playwright
 Chromium mirror (demo/replay **only** — the browser renders decisions already
 made and is never the training path).
 
@@ -104,7 +104,7 @@ predicted-vs-measured artifact ([`benchmarks/artifacts/`](benchmarks/artifacts/)
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"      # CPU: pydantic + pyyaml + pytest
-python -m pytest -q          # 88 tests, model-free, <2s
+python -m pytest -q          # 123 tests, model-free, <3s
 ```
 
 GPU (SLURM):
