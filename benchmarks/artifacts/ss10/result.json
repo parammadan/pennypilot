@@ -1,0 +1,7 @@
+{
+  "data_seconds": 0.1,
+  "compute_seconds": 52.74,
+  "data_fraction": 0.002,
+  "pretokenize_seconds": 4.7,
+  "verdict": "NO-GAP artifact: the dataloader is not a hotspot \u2014 pre-tokenization already eliminated it; prefetch machinery would optimize 0.20% of the loop"
+}

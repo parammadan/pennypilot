@@ -1,0 +1,20 @@
+{
+  "shuffled": {
+    "arm": "shuffled",
+    "steps": 50,
+    "real_tokens": 181050,
+    "pad_tokens": 16290,
+    "pad_fraction": 0.0825,
+    "real_tokens_per_sec": 3418.2,
+    "wall_seconds": 53.0
+  },
+  "bucketed": {
+    "arm": "bucketed",
+    "steps": 50,
+    "real_tokens": 180278,
+    "pad_tokens": 566,
+    "pad_fraction": 0.0031,
+    "real_tokens_per_sec": 3378.0,
+    "wall_seconds": 53.4
+  }
+}
