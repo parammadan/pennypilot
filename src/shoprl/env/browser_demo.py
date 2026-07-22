@@ -44,7 +44,13 @@ def render_storefront_html(catalog,
          background:var(--bg); display:grid; grid-template-columns:340px 1fr;
          height:100vh; }
   #chat { background:#fff; border-right:1px solid #e3e6ea; padding:14px;
-          overflow-y:auto; }
+          overflow-y:auto; display:flex; flex-direction:column; }
+  #msgs { flex:1; overflow-y:auto; }
+  #saybar { display:flex; gap:6px; padding-top:10px; border-top:1px solid #e3e6ea; }
+  #say { flex:1; padding:9px 11px; border:1px solid #cfd5db; border-radius:9px;
+         font-size:13px; }
+  #send { padding:9px 14px; border:none; border-radius:9px; background:var(--accent);
+          color:#fff; font-weight:600; cursor:pointer; }
   #chat h2 { font-size:13px; color:var(--muted); text-transform:uppercase;
              letter-spacing:.06em; margin-bottom:10px; }
   .bubble { max-width:92%; padding:8px 11px; border-radius:12px; margin:6px 0;
@@ -85,7 +91,9 @@ def render_storefront_html(catalog,
                   background:#fff; font-weight:600; }
   #modal button.approve { background:var(--accent); color:#fff; border:none; }
 </style></head><body>
-<aside id="chat"><h2>Conversation</h2></aside>
+<aside id="chat"><h2>Conversation</h2><div id="msgs"></div>
+  <div id="saybar"><input id="say" placeholder="…" autocomplete="off">
+  <button id="send">Send</button></div></aside>
 <main id="store">
   <header><h1><em>Penny</em>Mart</h1><span class="sim">SIMULATED — no real purchases</span>
     <input id="search" placeholder="Search products…"><div id="cart">Cart: <b>0</b></div>
@@ -99,7 +107,7 @@ def render_storefront_html(catalog,
 <script>
 const PRODUCTS = __PRODUCTS__;
 const grid = document.getElementById("grid");
-const chat = document.getElementById("chat");
+const chat = document.getElementById("msgs");
 function card(p){ return `<div class="card" data-sku="${p.sku}"><h3>${p.name}</h3>
   <div class="price">$${p.price.toFixed(2)}</div>
   <div class="specs">${p.ram_gb!==undefined?`${p.ram_gb}GB RAM · ${p.weight_lbs} lbs · ${p.battery_hrs} h · ${p.brand}`:""}</div>
@@ -124,11 +132,25 @@ window.pennymart = {
     document.getElementById("modal-reply").textContent = reply?`User: “${reply}”`:"";
     document.getElementById("modal").style.display="flex"; },
   closeModal(){ document.getElementById("modal").style.display="none"; },
+  hint(h){ const s=document.getElementById("say"); s.placeholder=h; s.focus(); },
   addToCart(sku){ document.querySelector("#cart b").textContent="1";
     const bn=document.getElementById("banner");
     bn.textContent=`✓ ${sku} added to cart (simulated) — with explicit permission`;
     bn.style.display="block"; },
 };
+window.__human = null;
+(function(){
+  const say = document.getElementById("say");
+  const send = document.getElementById("send");
+  function submit(){ const v = say.value.trim(); if(!v) return;
+    say.value=""; window.__human = v; }
+  send.onclick = submit;
+  say.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+  document.getElementById("approve").addEventListener("click",
+    () => { window.__human = "__yes__"; });
+  document.getElementById("hold").addEventListener("click",
+    () => { window.__human = "__no__"; });
+})();
 pennymart.all();
 </script></body></html>""".replace("__TITLE__", title).replace("__PRODUCTS__", products)
 
