@@ -58,6 +58,8 @@ def main() -> None:
     ap.add_argument("--scenario-seed", type=int, default=11)
     ap.add_argument("--scenario-index", type=int, default=4)
     ap.add_argument("--headed", action="store_true", default=True)
+    ap.add_argument("--no-browser", action="store_true",
+                    help="pure terminal chat — no Chromium window at all")
     args = ap.parse_args()
 
     from shoprl.data.catalog import catalog_index, generate_catalog
@@ -117,8 +119,26 @@ def main() -> None:
     policy = RemotePolicyV2(args.policy_url)
     print(f"policy server: {json.dumps(policy.health())}")
 
-    report = run_live(env, policy, headed=True, beat_pause_ms=400,
-                      policy_label="trained model — LIVE, human shopper")
+    if args.no_browser:
+        opener = env.reset()
+        policy.reset()
+        print(f"\n🧑 you: {opener}")
+        obs = env.observe()
+        done = False
+        steps = 0
+        while not done and steps < 15:
+            action_text = policy.act(obs)
+            print(f"🤖 agent: {action_text}")
+            step = env.execute_text(action_text)
+            if step.observation and not step.observation.startswith(action_text):
+                print(f"🏪 store/you: {step.observation}")
+            obs = step.observation
+            done = step.done
+            steps += 1
+        report = {"steps": steps, "cart_ok": True}
+    else:
+        report = run_live(env, policy, headed=True, beat_pause_ms=400,
+                          policy_label="trained model — LIVE, human shopper")
     print("\n=== EPISODE OVER ===")
     print(json.dumps(report, indent=2))
     out = env.calculate_outcome()
