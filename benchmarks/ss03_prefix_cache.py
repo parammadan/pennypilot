@@ -82,7 +82,9 @@ def main() -> None:
 
     if args.mode in ("apc_off", "apc_on"):
         from vllm import LLM, SamplingParams
-        sp = SamplingParams(temperature=0.8, max_tokens=64, seed=0)
+        sp = SamplingParams(temperature=0.8, max_tokens=64, seed=0,
+                            ignore_eos=True)  # exactly 64 decode steps
+                                              # -> latency deltas = prefill
         llm = LLM(model=args.model, dtype="float16",
                   gpu_memory_utilization=args.gpu_mem_util,
                   enable_prefix_caching=(args.mode == "apc_on"),
