@@ -11,7 +11,8 @@ def test_storefront_embeds_catalog_and_hooks():
     for p in catalog[:5]:
         assert p.sku in html
     for hook in ("window.pennymart", "results(skus)", "permission(items",
-                 "addToCart(sku)", 'id="search"', 'id="modal"', "SIMULATED"):
+                 "addToCart(sku)", 'id="search"', 'id="modal"', "SIMULATED",
+                 "laptopSVG", "Add to Cart"):
         assert hook in html
     assert html.count("<script>") == 1          # self-contained, no external JS
 
