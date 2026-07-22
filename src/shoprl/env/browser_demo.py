@@ -18,7 +18,7 @@ from pathlib import Path
 
 from shoprl.data.catalog import Product
 
-_SKU_RE = re.compile(r"[A-Z]{2,4}-\d{3,5}")
+_SKU_RE = re.compile(r"(?:[A-Z]{2,4}-\d{3,5}|B0[A-Z0-9]{8})")
 
 
 def skus_in(text: str) -> list[str]:
@@ -31,9 +31,11 @@ def skus_in(text: str) -> list[str]:
     return out
 
 
-def render_storefront_html(catalog: list[Product],
+def render_storefront_html(catalog,
                            title: str = "PennyMart — simulated storefront") -> str:
-    products = json.dumps([p.model_dump() for p in catalog])
+    items = [p.model_dump() if hasattr(p, "model_dump") else dict(p)
+             for p in catalog]
+    products = json.dumps(items)
     return """<!doctype html><html><head><meta charset="utf-8">
 <title>__TITLE__</title><style>
   :root { --accent:#0a7d4f; --ink:#1a2330; --muted:#68737f; --bg:#f5f6f8; }
@@ -100,7 +102,7 @@ const grid = document.getElementById("grid");
 const chat = document.getElementById("chat");
 function card(p){ return `<div class="card" data-sku="${p.sku}"><h3>${p.name}</h3>
   <div class="price">$${p.price.toFixed(2)}</div>
-  <div class="specs">${p.ram_gb}GB RAM · ${p.weight_lbs} lbs · ${p.battery_hrs} h · ${p.brand}</div>
+  <div class="specs">${p.ram_gb!==undefined?`${p.ram_gb}GB RAM · ${p.weight_lbs} lbs · ${p.battery_hrs} h · ${p.brand}`:""}</div>
   <div class="specs">${p.sku}</div></div>`; }
 function show(list){ grid.innerHTML = list.map(card).join(""); }
 window.pennymart = {
@@ -216,3 +218,110 @@ def replay_transcript(bundle: dict, headed: bool = False, slow_mo: int = 0,
     return {"beats": len(record["turns"]), "screenshots": shots,
             "cart_badge": cart_shown, "cart_expected": expected,
             "cart_ok": cart_shown == expected}
+
+
+# ---- shared projection + live mode -------------------------------------------
+def _project_action(page, r, note: str, observation: str, savings,
+                    snap, beat_pause_ms: int) -> None:
+    """Project ONE parsed action onto the storefront (shared by replay/live)."""
+    kind = r.action.action
+    if kind == "search":
+        page.fill("#search", "")
+        page.type("#search", r.action.query, delay=18)
+        page.evaluate(f"pennymart.results({json.dumps(skus_in(observation))})")
+        snap("search_results")
+    elif kind in ("inspect_product", "select_product"):
+        page.evaluate(f"pennymart.select({json.dumps(r.action.product_id)})")
+        snap(kind)
+    elif kind == "request_cart_permission":
+        page.evaluate("pennymart.permission(%s, %s, %s, %s)" % (
+            json.dumps(r.action.items), json.dumps(r.action.estimated_total),
+            json.dumps(savings), json.dumps(observation)))
+        snap("permission_modal")
+        page.wait_for_timeout(beat_pause_ms)
+        page.click("#approve" if "granted" in note else "#hold")
+        page.evaluate("pennymart.closeModal()")
+    elif kind == "add_to_cart":
+        if "permitted" in note:
+            page.evaluate(f"pennymart.addToCart({json.dumps(r.action.product_id)})")
+        snap("cart")
+
+
+def run_live(env, policy, headed: bool = True, slow_mo: int = 0,
+             screenshot_dir: str | None = None, beat_pause_ms: int = 900,
+             max_steps: int = 15, policy_label: str = "live policy") -> dict:
+    """LIVE mode: the policy decides each turn NOW and the browser mirrors it.
+    Same projection as replay — the browser stays a projection of structured
+    actions either way; only the source of decisions changes."""
+    from playwright.sync_api import sync_playwright
+
+    from shoprl.actions import parse_agent_action
+
+    import tempfile
+    workdir = tempfile.mkdtemp(prefix="pennymart-live-")
+    if hasattr(env, "catalog"):
+        page_items = env.catalog
+        store_title = "PennyMart — simulated storefront"
+    else:  # WebShopEnvironment: project the fake backend's item list
+        page_items = [{"sku": it.asin, "name": it.title, "price": it.price}
+                      for it in env.backend.items]
+        store_title = "PennyMart × WebShop — simulated storefront"
+    html_path = Path(workdir) / "pennymart.html"
+    html_path.write_text(render_storefront_html(page_items, title=store_title))
+
+    shots: list[str] = []
+    sdir = Path(screenshot_dir) if screenshot_dir else None
+    if sdir:
+        sdir.mkdir(parents=True, exist_ok=True)
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=not headed, slow_mo=slow_mo)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+
+        def snap(name: str) -> None:
+            if sdir:
+                fp = str(sdir / f"{len(shots):02d}_{name}.png")
+                page.screenshot(path=fp)
+                shots.append(fp)
+
+        page.goto(f"file://{html_path}")
+        opener = env.reset()
+        policy.reset(getattr(env, "scenario", None), getattr(env, "idx", None))
+        page.evaluate(f"pennymart.bubble('user', {json.dumps(opener)}, "
+                      f"{json.dumps('policy: ' + policy_label)})")
+        snap("opening")
+
+        obs = env.observe()
+        done = False
+        steps = 0
+        while not done and steps < max_steps:
+            action_text = policy.act(obs)
+            step = env.execute_text(action_text)
+            page.evaluate(f"pennymart.bubble('agent', {json.dumps(action_text)}, "
+                          f"{json.dumps(step.note)})")
+            r = parse_agent_action(action_text)
+            if r.ok:
+                _project_action(page, r, step.note, step.observation,
+                                env.state.estimated_savings, snap, beat_pause_ms)
+            if step.observation:
+                page.evaluate(
+                    f"pennymart.bubble('user', {json.dumps(step.observation[:400])})")
+            obs = step.observation
+            done = step.done
+            steps += 1
+            page.wait_for_timeout(beat_pause_ms if headed else 30)
+
+        snap("final")
+        cart_shown = page.text_content("#cart b")
+        if headed:
+            page.wait_for_timeout(4 * beat_pause_ms)   # hold the final frame
+        browser.close()
+
+    out = env.calculate_outcome()
+    expected = "1" if env.get_cart() else "0"
+    return {"steps": steps, "screenshots": shots, "cart_badge": cart_shown,
+            "cart_ok": cart_shown == expected,
+            "reward": getattr(out, "total", getattr(out, "score", None)),
+            "value_quality": getattr(out, "value_quality",
+                                     getattr(out, "score", None)),
+            "violation": bool(out.acted_without_permission)}
