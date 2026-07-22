@@ -37,6 +37,12 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
     ap.add_argument("--method", default="lora", choices=["lora", "full"])
+    ap.add_argument("--system", default="v2", choices=["v2", "chat"],
+                    help="v2 = actions-only SYSTEM_PROMPT_V2 (the 1.5B recipe); "
+                         "chat = SYSTEM_PROMPT_CHAT_MIN (H3 chat-capable arms)")
+    ap.add_argument("--rehearsal", default=None,
+                    help="JSONL of {q,a} general-chat exemplars to MIX IN "
+                         "(H3 Arm B rehearsal); omit for the specialist arm")
     ap.add_argument("--demos", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--catalog-size", type=int, default=300)
@@ -55,15 +61,30 @@ def main() -> None:
     import torch
 
     from shoprl.data.catalog import generate_catalog
-    from shoprl.data.prompts_v2 import SYSTEM_PROMPT_V2
-    from shoprl.data.sft_v2 import demo_v2_stats, generate_sft_v2_dialogues
+    from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT_MIN, SYSTEM_PROMPT_V2
+    from shoprl.data.sft_v2 import (DemoTurnV2, DemoV2, demo_v2_stats,
+                                    generate_sft_v2_dialogues)
     from shoprl.train.build import build_model
     from shoprl.train.sft import build_example, collate, verify_mask
+
+    SYS = SYSTEM_PROMPT_CHAT_MIN if args.system == "chat" else SYSTEM_PROMPT_V2
 
     os.makedirs(args.out_dir, exist_ok=True)
     catalog = generate_catalog(n=args.catalog_size, seed=0)
     demos = generate_sft_v2_dialogues(catalog, n=args.demos, seed=args.seed)
-    print(f"[sft-v2] demos: {json.dumps(demo_v2_stats(demos))}")
+    print(f"[sft-v2] shopping demos: {json.dumps(demo_v2_stats(demos))}")
+    if args.rehearsal:                        # H3 Arm B: mix in general chat
+        reh = [json.loads(l) for l in open(args.rehearsal) if l.strip()]
+        reh_demos = [DemoV2(scenario_id=f"chat-{i}", kind="rehearsal",
+                            language=r.get("lang", "en"), target_sku="", n_asks=0,
+                            turns=[DemoTurnV2("user", r["q"]),
+                                   DemoTurnV2("agent", r["a"])])
+                     for i, r in enumerate(reh)]
+        demos = demos + reh_demos
+        import random as _rnd
+        _rnd.Random(args.seed).shuffle(demos)
+        print(f"[sft-v2] +{len(reh_demos)} rehearsal exemplars "
+              f"({len(reh_demos)/len(demos)*100:.0f}% of mix), shuffled")
 
     built = build_model(args.model, method=args.method,
                         dtype=torch.float16, device="cuda",
@@ -74,14 +95,14 @@ def main() -> None:
         if p.requires_grad:
             p.data = p.data.float()
 
-    examples = [build_example(tok, d, args.max_len, system=SYSTEM_PROMPT_V2)
+    examples = [build_example(tok, d, args.max_len, system=SYS)
                 for d in demos]
     lens = sorted(len(e["input_ids"]) for e in examples)
     print(f"[sft-v2] token lens: max {lens[-1]} p99 {lens[int(len(lens)*0.99)-1]} "
           f"mean {sum(lens)//len(lens)} (max_len {args.max_len})")
-    verify_mask(tok, demos[0], args.max_len, example=examples[0],
-                system=SYSTEM_PROMPT_V2)
-    print("[sft-v2] loss mask VERIFIED (reference-exact + leak checks)")
+    verify_mask(tok, demos[0], args.max_len, example=examples[0], system=SYS)
+    print(f"[sft-v2] loss mask VERIFIED (system={args.system}, "
+          "reference-exact + leak checks)")
 
     optimizer = torch.optim.AdamW(
         (p for p in model.parameters() if p.requires_grad), lr=args.lr)
@@ -123,6 +144,21 @@ def main() -> None:
         }, os.path.join(d, "train_state.pt"))
         print(f"[sft-v2] saved {d}")
 
+    perf = {"tok": 0, "steps": 0}
+
+    def perf_summary() -> None:
+        wall = time.time() - t0
+        gb = round(torch.cuda.max_memory_allocated() / 2**30, 2)
+        rec = {"model": args.model, "method": args.method, "system": args.system,
+               "batch_size": args.batch_size, "rehearsal": bool(args.rehearsal),
+               "steps": perf["steps"], "wall_s": round(wall, 1),
+               "ms_per_step": round(wall / max(perf["steps"], 1) * 1000, 1),
+               "tokens_per_s": round(perf["tok"] / wall, 1) if wall else 0,
+               "peak_mem_gb": gb}
+        with open(os.path.join(args.out_dir, "perf.json"), "w") as f:
+            json.dump(rec, f, indent=2)
+        print(f"[sft-v2] PERF baseline: {json.dumps(rec)}")
+
     mpath = os.path.join(args.out_dir, "metrics.jsonl")
     model.train()
     step = 0
@@ -149,7 +185,9 @@ def main() -> None:
                  "grad_norm": round(float(gnorm), 4),
                  "scaler_scale": float(scaler.get_scale()),
                  "supervised_tokens": int((batch["labels"] != -100).sum().item()),
+                 "batch_tokens": int(batch["attention_mask"].sum().item()),
                  "wall_s": round(time.time() - t0, 1)}
+            perf["tok"] += m["batch_tokens"]; perf["steps"] += 1
             with open(mpath, "a") as f:
                 f.write(json.dumps(m) + "\n")
             if step % 10 == 0 or step == 1:
@@ -163,9 +201,11 @@ def main() -> None:
                 raise SystemExit(0)
             if args.max_steps and step - start_step >= args.max_steps:
                 save(step, final=True)
+                perf_summary()
                 print(f"[sft-v2] max-steps reached -> {args.out_dir}/policy")
                 return
     save(step, final=True)
+    perf_summary()
     print(f"[sft-v2] done ({step} steps, {time.time()-t0:.0f}s) -> {args.out_dir}/policy")
 
 
