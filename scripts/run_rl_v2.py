@@ -22,6 +22,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
     ap.add_argument("--sft-adapter", required=True)
+    ap.add_argument("--system", default="v2", choices=["v2", "chat"],
+                    help="must match the SFT arm's prompt (chat = H3 arms)")
     ap.add_argument("--algo", default="rloo", choices=["rloo", "grpo", "grpo-nostd"])
     ap.add_argument("--steps", type=int, default=10)
     ap.add_argument("--k", type=int, default=8)
@@ -51,10 +53,11 @@ def main() -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     from shoprl.data.catalog import catalog_index, generate_catalog
-    from shoprl.data.prompts_v2 import SYSTEM_PROMPT_V2
+    from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT_MIN, SYSTEM_PROMPT_V2
     from shoprl.env.scenario import generate_hard_scenarios
     from shoprl.train.algo import RLConfigV2, rl_step
 
+    SYS = SYSTEM_PROMPT_CHAT_MIN if args.system == "chat" else SYSTEM_PROMPT_V2
     tok = AutoTokenizer.from_pretrained(args.sft_adapter)
 
     def load(trainable: bool):
@@ -147,7 +150,7 @@ def main() -> None:
                  for j in range(args.prompts_per_step)]
         t0 = time.time()
         m = rl_step(policy, reference, tok, optimizer, scaler, catalog, picks,
-                    idx, cfg, SYSTEM_PROMPT_V2)
+                    idx, cfg, SYS)
         m["step"] = step
         m["step_seconds"] = round(time.time() - t0, 1)
         with open(mpath, "a") as f:
