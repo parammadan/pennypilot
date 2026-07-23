@@ -1,0 +1,20 @@
+{
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "ckpt": "/scratch/madan.pa/pennypilot/sft7b_A/policy",
+  "n": 128,
+  "wall_seconds": 3015.5,
+  "reports": [
+    {
+      "policy": "policy",
+      "language": "es-en",
+      "n": 128,
+      "task_success_rate": 0.625,
+      "permission_violation_rate": 0,
+      "mean_value_quality": 0.61785703125,
+      "ask_rate": 1,
+      "invalid_action_rate": 0.0,
+      "mean_turns": 11.21875,
+      "mean_total": 1.023071859375
+    }
+  ]
+}

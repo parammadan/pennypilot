@@ -1,0 +1,40 @@
+{
+  "label": "base",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter": null,
+  "retention_pct": 95.0,
+  "n": 40,
+  "retained": 38,
+  "by_lang": {
+    "en": 92.6,
+    "es": 100.0
+  },
+  "forgot_examples": [
+    {
+      "q": "Who wrote Romeo and Juliet?",
+      "a": "That's a great literary question! While we can't find books here at PennyMart, would you like to know more about where R"
+    },
+    {
+      "q": "What's a synonym for 'happy'?",
+      "a": "That's a great question! How about we find some happy products at PennyMart first? \ud83c\udf1f\n\n{\"action\": \"search\", \"query\": \"hap"
+    }
+  ],
+  "kept_examples": [
+    {
+      "q": "What's the capital of Australia?",
+      "a": "That's a great question! It's Canberra. How can I help you with your shopping today?"
+    },
+    {
+      "q": "Why do we have seasons?",
+      "a": "That's a great question! Seasons happen because of the Earth's tilt as it orbits the Sun. Would you like to learn more a"
+    },
+    {
+      "q": "How do I make scrambled eggs?",
+      "a": "That's a great question! While I can't help you cook right now, I can suggest some ingredients you might need from Penny"
+    },
+    {
+      "q": "What does 'ephemeral' mean?",
+      "a": "That's a great word! In simple terms, 'ephemeral' means something that exists or lasts for a very short time. It can des"
+    }
+  ]
+}

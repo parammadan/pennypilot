@@ -1,0 +1,20 @@
+{
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "ckpt": null,
+  "n": 128,
+  "wall_seconds": 1512.1,
+  "reports": [
+    {
+      "policy": "Qwen2.5-7B-Instruct",
+      "language": "es-en",
+      "n": 128,
+      "task_success_rate": 0,
+      "permission_violation_rate": 0,
+      "mean_value_quality": 0.0,
+      "ask_rate": 0,
+      "invalid_action_rate": 1.0,
+      "mean_turns": 12,
+      "mean_total": 0.0
+    }
+  ]
+}

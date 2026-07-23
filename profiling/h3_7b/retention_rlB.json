@@ -1,0 +1,36 @@
+{
+  "label": "rlB",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter": "/scratch/madan.pa/pennypilot/rl7b_B/policy/policy",
+  "retention_pct": 97.5,
+  "n": 40,
+  "retained": 39,
+  "by_lang": {
+    "en": 96.3,
+    "es": 100.0
+  },
+  "forgot_examples": [
+    {
+      "q": "What's a synonym for 'happy'?",
+      "a": "Joyful"
+    }
+  ],
+  "kept_examples": [
+    {
+      "q": "What's the capital of Australia?",
+      "a": "The capital of Australia is Canberra!"
+    },
+    {
+      "q": "Why do we have seasons?",
+      "a": "We have seasons because Earth's axis is tilted as it orbits the Sun. This tilt causes different parts of the planet to r"
+    },
+    {
+      "q": "How do I make scrambled eggs?",
+      "a": "Sure thing! Here\u2019s a simple way to make scrambled eggs:\n\n1. Crack 2-3 eggs into a bowl.\n2. Whisk them well with a fork u"
+    },
+    {
+      "q": "Who wrote Romeo and Juliet?",
+      "a": "William Shakespeare wrote Romeo and Juliet. It's one of his most famous tragedies!"
+    }
+  ]
+}

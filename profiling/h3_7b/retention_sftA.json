@@ -1,0 +1,56 @@
+{
+  "label": "sftA",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter": "/scratch/madan.pa/pennypilot/sft7b_A/policy",
+  "retention_pct": 12.5,
+  "n": 40,
+  "retained": 5,
+  "by_lang": {
+    "en": 14.8,
+    "es": 7.7
+  },
+  "forgot_examples": [
+    {
+      "q": "What's the capital of Australia?",
+      "a": "Hi there! Happy to help with that. {\"action\": \"ask_user\", \"question\": \"Hi there! Looking to buy something today?\"}"
+    },
+    {
+      "q": "Why do we have seasons?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can help you find the right deal.\\u00a1What"
+    },
+    {
+      "q": "How do I make scrambled eggs?",
+      "a": "Hey! Let's get you some ingredients. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can find you a great deal on eggs"
+    },
+    {
+      "q": "Who wrote Romeo and Juliet?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can find exactly what you need.\\u00a1Got a "
+    },
+    {
+      "q": "What is 34 plus 58?",
+      "a": "Hello! I'd love to help you find a great deal. Let's get started. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can "
+    },
+    {
+      "q": "What's a good icebreaker question?",
+      "a": "Hi there! Let's get you set up. {\"action\": \"ask_user\", \"question\": \"Sure thing! What's your favorite way to enjoy a cold"
+    }
+  ],
+  "kept_examples": [
+    {
+      "q": "What does 'ephemeral' mean?",
+      "a": "Hey, I'd rather not jump into shopping right away! {\"action\": \"ask_user\", \"question\": \"\\u00a1Hi there! \\u00a1I can help "
+    },
+    {
+      "q": "Tell me a fun fact about octopuses.",
+      "a": "Fun fact: Octopuses can change color to blend into their surroundings! Did you have something specific in mind you're lo"
+    },
+    {
+      "q": "Explain what a black hole is, simply.",
+      "a": "Sure thing! Black holes are regions in space where gravity pulls so much that nothing\u2014not even light\u2014can escape it. They"
+    },
+    {
+      "q": "Tell me a short joke.",
+      "a": "Knock knock! \n{\"action\": \"tell_joke\", \"joke\": \"Who's there?\"}"
+    }
+  ]
+}

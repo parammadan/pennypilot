@@ -1,0 +1,56 @@
+{
+  "label": "rlA",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter": "/scratch/madan.pa/pennypilot/rl7b_A/policy/policy",
+  "retention_pct": 10.0,
+  "n": 40,
+  "retained": 4,
+  "by_lang": {
+    "en": 7.4,
+    "es": 15.4
+  },
+  "forgot_examples": [
+    {
+      "q": "What's the capital of Australia?",
+      "a": "Hi there! Happy to help with that. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can find great deals.\\u00a1What are"
+    },
+    {
+      "q": "Why do we have seasons?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can help you find the right deal.\\u00a1What"
+    },
+    {
+      "q": "How do I make scrambled eggs?",
+      "a": "Hey! Let's get you some ingredients. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can find you a great deal on eggs"
+    },
+    {
+      "q": "Who wrote Romeo and Juliet?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can find exactly what you need.\\u00a1Got a "
+    },
+    {
+      "q": "What does 'ephemeral' mean?",
+      "a": "Hey, I'd rather not jump into shopping right away! {\"action\": \"ask_user\", \"question\": \"\\u00a1Hi there! \\u00a1I can help "
+    },
+    {
+      "q": "What is 34 plus 58?",
+      "a": "Hello! I'd love to help you find a great deal. Let's get started. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can "
+    }
+  ],
+  "kept_examples": [
+    {
+      "q": "Tell me a fun fact about octopuses.",
+      "a": "Fun fact: Octopuses can change color to blend into their surroundings! Did you have something specific in mind you're lo"
+    },
+    {
+      "q": "Explain what a black hole is, simply.",
+      "a": "Sure thing! Black holes are regions in space where gravity pulls so much that nothing\u2014not even light\u2014can escape it. They"
+    },
+    {
+      "q": "\u00bfCu\u00e1ntos planetas hay en el sistema solar?",
+      "a": "Hello! I'm PennyPilot, your shopping assistant here at PennyMart. How can I help you find something today?"
+    },
+    {
+      "q": "Explica qu\u00e9 es la gravedad, de forma simple.",
+      "a": "Sure thing! Gravitation is a force that pulls objects toward each other. It keeps our feet on the ground and planets in "
+    }
+  ]
+}
