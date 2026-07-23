@@ -160,10 +160,15 @@ def test_cannot_fulfill_demos_explain_and_redirect():
     cf = [d for d in demos if d.kind == "cannot_fulfill"]
     assert cf, "family must be generated"
     for d in cf:
-        # turn 1 is the odd request, turn 2 the demonstrated explain+redirect
-        odd, redirect = d.turns[1], d.turns[2]
+        # strict alternation: opener, budget ask, odd ANSWER (live position),
+        # explain+redirect, corrected answer, then the normal flow
+        roles = [t.role for t in d.turns]
+        assert all(a != b for a, b in zip(roles, roles[1:])), roles
+        odd, redirect, corrected = d.turns[2], d.turns[3], d.turns[4]
         assert odd.role == "user" and odd.injected
         assert redirect.role == "agent"
+        assert corrected.role == "user" and corrected.injected
+        assert "$" in corrected.text     # states the true max budget
         assert '"action": "ask_user"' in redirect.text
         low = redirect.text.lower()
         assert ("laptops-only" in low or "laptops only" in low

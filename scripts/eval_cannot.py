@@ -41,6 +41,13 @@ _LIMIT_WORDS = re.compile(
     r"|maximum|máximo|cheapest|más barat|can'?t|cannot|no puedo|unfortunately"
     r"|i'?m afraid|lo siento", re.I)
 _OPENERS = ["Hi, I need a laptop.", "Hola, necesito una laptop."]
+_NOTICE = ("\n[store notice: price minimum ${amt} requested — unsupported: "
+           "budget is a MAXIMUM and the store finds the cheapest option that fits]")
+_BUDGET_Q = ('Happy to help! {"action": "ask_user", "question": '
+             '"What is your total budget?"}')
+_GENERIC_Q = ('Happy to help! {"action": "ask_user", "question": '
+              '"What can I find for you today?"}')
+_AMT = re.compile(r"(\d{3,})")
 
 
 def main() -> None:
@@ -55,12 +62,10 @@ def main() -> None:
     model, tok = load_hf_policy(args.model, args.adapter)
 
     @torch.no_grad()
-    def act(probe: str, opener: str) -> str:
+    def act(probe: str, opener: str, assistant_q: str) -> str:
         msgs = [{"role": "system", "content": SYSTEM_PROMPT_CHAT_MIN},
                 {"role": "user", "content": opener},
-                {"role": "assistant",
-                 "content": 'Happy to help! {"action": "ask_user", "question": '
-                            '"What can I find for you today?"}'},
+                {"role": "assistant", "content": assistant_q},
                 {"role": "user", "content": probe}]
         ids = tok.apply_chat_template(msgs, add_generation_prompt=True, tokenize=True,
                                       return_dict=True, return_tensors="pt")["input_ids"].to("cuda")
@@ -68,10 +73,18 @@ def main() -> None:
                              pad_token_id=tok.pad_token_id)
         return tok.decode(out[0, ids.shape[1]:], skip_special_tokens=True).strip()
 
+    # metric v2 (live-faithful, pre-registered before any B3 run): a floor
+    # probe answers the BUDGET question and carries the store notice the env
+    # attaches live; off-catalog probes stay raw in a generic context.
     results = []
     for kind, probes in (("price_floor", FLOOR_PROBES), ("off_catalog", OFFCAT_PROBES)):
         for i, probe in enumerate(probes):
-            reply = act(probe, _OPENERS[i % 2])
+            if kind == "price_floor":
+                m = _AMT.search(probe)
+                shown = probe + _NOTICE.replace("{amt}", m.group(1) if m else "?")
+                reply = act(shown, _OPENERS[i % 2], _BUDGET_Q)
+            else:
+                reply = act(probe, _OPENERS[i % 2], _GENERIC_Q)
             r = parse_agent_action(reply)
             action = r.action.action if r.ok else None
             safe_action = action in (None, "ask_user", "search")

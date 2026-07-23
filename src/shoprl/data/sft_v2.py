@@ -84,6 +84,14 @@ _OFFCAT_REDIRECT_QS = [
     "deal though — what price range (budget) works for you?",
 ]
 _NL_CANNOT = ["Quick note first —", "One thing before we start:", "So —"]
+# the shopper's corrected answer after the redirect — states the TRUE max
+# budget so the recorded words match the env's ground-truth filtering
+_CORRECTED_LINES = [
+    "Oh got it — then my maximum is ${budget}.",
+    "Ah entiendo — máximo ${budget} entonces.",
+    "Ok ok, max ${budget} then, deal.",
+    "No worries — for the laptop, up to ${budget}.",
+]
 
 
 @dataclass
@@ -207,25 +215,33 @@ def _build_demo(catalog, idx, scen: Scenario, kind: str, language: str,
         return demo
 
     if kind == "cannot_fulfill":
-        # The odd request arrives right after the opener; the demonstrated
-        # reply EXPLAINS the limit in prose, then redirects into budget
-        # discovery (the ask_user question doubles as the budget question).
+        # LIVE-FAITHFUL position (the observed failure was "2500 minimun"
+        # given AS THE ANSWER to the budget question): agent asks budget →
+        # shopper's recorded answer is the odd request (injected, with the
+        # store notice a live floor would carry) → agent EXPLAINS + REDIRECTS
+        # → shopper's corrected answer states the true max → normal flow.
+        # Strict alternation throughout — consecutive same-role turns train a
+        # context shape that never occurs at inference (B2 lesson).
         floor = rng.random() < 0.5
+        ask1 = AskUser(action="ask_user", question=rng.choice(_BUDGET_QS))
+        env.execute_text(action_to_json(ask1))    # env reveals budget (truth)
+        turns.append(DemoTurnV2(
+            "agent", f"{_nl_prefix(ask1, rng, True)} {action_to_json(ask1)}"))
         odd = rng.choice(_FLOOR_LINES if floor else _OFFCAT_LINES)
-        turns.append(DemoTurnV2("user", odd, injected=True))
         env.state.observe_user_message(odd)
-        # a detected floor also rides on the turn as the store notice the
-        # policy would see live
         notes = list(getattr(env.state, "unsupported_notes", []) or [])
-        if notes:
-            env.state.unsupported_notes = []
-            turns[-1].text += "".join(f"\n[store notice: {n}]" for n in notes)
+        env.state.unsupported_notes = []
+        odd_text = odd + "".join(f"\n[store notice: {n}]" for n in notes)
+        turns.append(DemoTurnV2("user", odd_text, injected=True))
         redirect = rng.choice(_FLOOR_REDIRECT_QS if floor else _OFFCAT_REDIRECT_QS)
-        aj = action_to_json(AskUser(action="ask_user", question=redirect))
-        step = env.execute_text(aj)
-        turns.append(DemoTurnV2("agent", f"{rng.choice(_NL_CANNOT)} {redirect} {aj}"))
-        turns.append(DemoTurnV2("user", step.observation))
-        n_asks = 1 + _discover_features_only(env, turns, rng, n_features)
+        aj2 = action_to_json(AskUser(action="ask_user", question=redirect))
+        env.execute_text(aj2)                     # redundant ask; obs replaced
+        turns.append(DemoTurnV2("agent", f"{rng.choice(_NL_CANNOT)} {redirect} {aj2}"))
+        corrected = rng.choice(_CORRECTED_LINES).format(
+            budget=f"{scen.hidden_budget:.0f}")
+        env.state.observe_user_message(corrected)
+        turns.append(DemoTurnV2("user", corrected, injected=True))
+        n_asks = 2 + _discover_features_only(env, turns, rng, n_features)
         picked = _select_top(env, turns, rng)
         _drive(env, turns, AddToCart(action="add_to_cart", product_id=picked), rng)
         demo = DemoV2(scen.scenario_id, "cannot_fulfill", language, picked,
@@ -258,7 +274,7 @@ def generate_sft_v2_dialogues(
     seed: int = 0,
     denied_frac: float = 0.20,
     hold_frac: float = 0.05,
-    cannot_frac: float = 0.08,
+    cannot_frac: float = 0.12,
     language_weights: dict[str, float] | None = None,
 ) -> list[DemoV2]:
     """`n` recorded expert demonstrations over hard scenarios, mixed languages."""
