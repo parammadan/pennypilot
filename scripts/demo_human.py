@@ -212,13 +212,21 @@ def run_browser_chat(args) -> None:
         obs = env.observe()
         done = False
         steps = 0
-        while not done and steps < 15:
+        while not done and steps < (40 if args.chat else 15):
             action_text = policy.act(obs)
-            step = env.execute_text(action_text)
+            exec_text = action_text
+            if args.chat and "{" not in action_text:
+                # rehearsal-trained policies answer non-shopping turns as pure
+                # prose (no action) — route through ask_user so the env waits
+                # for the human instead of flagging an invalid action
+                exec_text = action_text + " " + json.dumps(
+                    {"action": "ask_user", "question": action_text})
+            step = env.execute_text(exec_text)
+            note = "" if exec_text != action_text else step.note
             page.evaluate(f"pennymart.bubble('agent', "
                           f"{json.dumps(_agent_say(action_text, args.chat))}, "
-                          f"{json.dumps(step.note)})")
-            r = parse_agent_action(action_text)
+                          f"{json.dumps(note)})")
+            r = parse_agent_action(exec_text)
             if r.ok and r.action.action != "request_cart_permission":
                 _project_action(page, r, step.note, step.observation,
                                 env.state.estimated_savings,
@@ -308,10 +316,14 @@ def run_terminal_chat(args) -> None:
     obs = env.observe()
     done = False
     steps = 0
-    while not done and steps < 15:
+    while not done and steps < (40 if args.chat else 15):
         action_text = policy.act(obs)
         print(f"🤖 agent: {_agent_say(action_text, args.chat)}")
-        step = env.execute_text(action_text)
+        exec_text = action_text
+        if args.chat and "{" not in action_text:
+            exec_text = action_text + " " + json.dumps(
+                {"action": "ask_user", "question": action_text})
+        step = env.execute_text(exec_text)
         if step.observation:
             print(f"🏪 store/you: {step.observation}")
         obs = step.observation
