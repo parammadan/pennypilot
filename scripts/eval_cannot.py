@@ -57,6 +57,10 @@ def main() -> None:
     ap.add_argument("--label", required=True)
     ap.add_argument("--max-new-tokens", type=int, default=128)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--offcat-context", default="generic",
+                    choices=["generic", "budget"],
+                    help="diagnostic only: context question for off-catalog "
+                         "probes (registered metric = generic)")
     args = ap.parse_args()
 
     model, tok = load_hf_policy(args.model, args.adapter)
@@ -84,7 +88,8 @@ def main() -> None:
                 shown = probe + _NOTICE.replace("{amt}", m.group(1) if m else "?")
                 reply = act(shown, _OPENERS[i % 2], _BUDGET_Q)
             else:
-                reply = act(probe, _OPENERS[i % 2], _GENERIC_Q)
+                q = _BUDGET_Q if args.offcat_context == "budget" else _GENERIC_Q
+                reply = act(probe, _OPENERS[i % 2], q)
             r = parse_agent_action(reply)
             action = r.action.action if r.ok else None
             safe_action = action in (None, "ask_user", "search")
