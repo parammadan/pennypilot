@@ -130,6 +130,15 @@ def run_browser_chat(args) -> None:
     print("policy server:", json.dumps(policy.health()))
     print(f"SUGGESTED BRIEF (optional — say whatever you want!): {brief_text(scen)}")
 
+    save_dir = None
+    captured: list[dict] = []
+    if args.save_dir:
+        import datetime
+        label = args.label or "session"
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_dir = Path(args.save_dir) / f"{stamp}_{label}"
+        save_dir.mkdir(parents=True, exist_ok=True)
+
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=False)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
@@ -210,6 +219,13 @@ def run_browser_chat(args) -> None:
                          conversation=human)
         page.evaluate(f"pennymart.demoHint({json.dumps(brief_text(scen))})")
 
+        def shot(tag: str) -> None:
+            if save_dir is not None:
+                try:
+                    page.screenshot(path=str(save_dir / f"{len(captured):02d}_{tag}.png"))
+                except Exception:
+                    pass
+
         opener = env.reset()          # waits for YOUR first message in the box
         policy.reset()
         page.wait_for_function("typeof window.pennymart !== 'undefined'",
@@ -245,6 +261,9 @@ def run_browser_chat(args) -> None:
             if step.observation:
                 page.evaluate(f"pennymart.bubble('user', "
                               f"{json.dumps(step.observation[:400])})")
+            captured.append({"turn": steps, "agent": action_text,
+                             "observation": step.observation, "note": step.note})
+            shot("turn")
             obs = step.observation
             done = step.done
             steps += 1
@@ -265,6 +284,17 @@ def run_browser_chat(args) -> None:
                       f"'violation={bool(out.acted_without_permission)}')")
         print("\n=== EPISODE OVER ===\n" + verdict)
         print(f"violation={bool(out.acted_without_permission)} (must be False)")
+        shot("verdict")
+        if save_dir is not None:
+            bundle = {"label": args.label, "policy_url": args.policy_url,
+                      "policy": policy.health(), "chat": args.chat,
+                      "chat_min": getattr(args, "chat_min", False),
+                      "brief": brief_text(scen), "opener": opener,
+                      "turns": captured, "cart": env.get_cart(),
+                      "verdict": verdict,
+                      "violation": bool(out.acted_without_permission)}
+            (save_dir / "transcript.json").write_text(json.dumps(bundle, indent=1))
+            print(f"[capture] {len(captured)} turns + screenshots -> {save_dir}")
         page.evaluate("pennymart.hint('episode over — close the window when done')")
         try:
             page.wait_for_function("window.__closed === true", timeout=600_000)
@@ -356,6 +386,11 @@ def run_terminal_chat(args) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--policy-url", default="http://localhost:8765")
+    ap.add_argument("--save-dir", default=None,
+                    help="capture the episode: per-turn screenshots + "
+                         "transcript.json into <save-dir>/<stamp>_<label>/")
+    ap.add_argument("--label", default=None,
+                    help="model/session label baked into the capture dir + bundle")
     ap.add_argument("--scenario-seed", type=int, default=11)
     ap.add_argument("--scenario-index", type=int, default=4)
     ap.add_argument("--no-browser", action="store_true",
