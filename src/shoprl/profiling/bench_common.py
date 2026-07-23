@@ -26,7 +26,11 @@ def load_hf_policy(model_name: str, adapter: str | None):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    tok = AutoTokenizer.from_pretrained(adapter or model_name)
+    # shared-ref nested adapter dirs hold only LoRA weights, no tokenizer files
+    try:
+        tok = AutoTokenizer.from_pretrained(adapter or model_name)
+    except Exception:
+        tok = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
         model_name, dtype=torch.float16, attn_implementation="sdpa").to("cuda")
     if adapter:

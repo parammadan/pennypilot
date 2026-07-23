@@ -48,7 +48,11 @@ def main() -> None:
     from shoprl.eval.hf_policy import HFPolicyV2
 
     SYS = SYSTEM_PROMPT_CHAT_MIN if args.system == "chat" else SYSTEM_PROMPT_V2
-    tok = AutoTokenizer.from_pretrained(args.ckpt or args.model)
+    # shared-ref nested adapter dirs hold only LoRA weights, no tokenizer files
+    try:
+        tok = AutoTokenizer.from_pretrained(args.ckpt or args.model)
+    except Exception:
+        tok = AutoTokenizer.from_pretrained(args.model)
     model = AutoModelForCausalLM.from_pretrained(
         args.model, dtype=torch.float16, attn_implementation="sdpa").to("cuda")
     if args.ckpt:
