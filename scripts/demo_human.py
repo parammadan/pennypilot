@@ -227,11 +227,16 @@ def run_browser_chat(args) -> None:
                 # for the human instead of flagging an invalid action
                 exec_text = action_text + " " + json.dumps(
                     {"action": "ask_user", "question": action_text})
+            if args.chat:
+                # draw the reply BEFORE the env blocks waiting for the human,
+                # or the user and the agent deadlock staring at each other
+                page.evaluate(f"pennymart.bubble('agent', "
+                              f"{json.dumps(_agent_say(action_text, True))}, '')")
             step = env.execute_text(exec_text)
-            note = "" if exec_text != action_text else step.note
-            page.evaluate(f"pennymart.bubble('agent', "
-                          f"{json.dumps(_agent_say(action_text, args.chat))}, "
-                          f"{json.dumps(note)})")
+            if not args.chat:
+                page.evaluate(f"pennymart.bubble('agent', "
+                              f"{json.dumps(_agent_say(action_text, args.chat))}, "
+                              f"{json.dumps(step.note)})")
             r = parse_agent_action(exec_text)
             if r.ok and r.action.action != "request_cart_permission":
                 _project_action(page, r, step.note, step.observation,
