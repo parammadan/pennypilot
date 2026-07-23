@@ -24,6 +24,10 @@ def main() -> None:
     ap.add_argument("--sft-adapter", required=True)
     ap.add_argument("--system", default="v2", choices=["v2", "chat"],
                     help="must match the SFT arm's prompt (chat = H3 arms)")
+    ap.add_argument("--shared-ref", action="store_true",
+                    help="policy+reference share ONE frozen base via two LoRA "
+                         "adapters (halves weight memory; 7B RL fits a 32GB V100 "
+                         "instead of OOMing with two full copies)")
     ap.add_argument("--algo", default="rloo", choices=["rloo", "grpo", "grpo-nostd"])
     ap.add_argument("--steps", type=int, default=10)
     ap.add_argument("--k", type=int, default=8)
@@ -60,20 +64,51 @@ def main() -> None:
     SYS = SYSTEM_PROMPT_CHAT_MIN if args.system == "chat" else SYSTEM_PROMPT_V2
     tok = AutoTokenizer.from_pretrained(args.sft_adapter)
 
-    def load(trainable: bool):
+    class _RefProxy:
+        """Reference logprobs from the SAME base as the policy via a frozen 2nd
+        LoRA adapter. _token_logprobs only ever calls model(ids).logits, so
+        flipping to the 'ref' adapter around that one call is all it takes —
+        one 7B base instead of two, so RL fits a 32GB V100 (two full copies
+        OOM'd at 30.7GB) and runs on the idle V100 pool, no A100 wait."""
+
+        def __init__(self, model):
+            self._m = model
+
+        def __call__(self, *a, **k):
+            self._m.set_adapter("ref")
+            try:
+                return self._m(*a, **k)
+            finally:
+                self._m.set_adapter("policy")
+
+    if args.shared_ref:
         base = AutoModelForCausalLM.from_pretrained(
             args.model, dtype=torch.float16,
             attn_implementation="sdpa").to("cuda")
-        m = PeftModel.from_pretrained(base, args.sft_adapter,
-                                      is_trainable=trainable)
-        if not trainable:
-            m.eval()
-            for p in m.parameters():
-                p.requires_grad_(False)
-        return m
+        policy = PeftModel.from_pretrained(base, args.sft_adapter,
+                                           adapter_name="policy",
+                                           is_trainable=True)
+        policy.load_adapter(args.sft_adapter, adapter_name="ref",
+                            is_trainable=False)
+        policy.set_adapter("policy")
+        reference = _RefProxy(policy)
+        print("[rl-v2] SHARED-BASE reference (PEFT 2-adapter): one base + "
+              "policy/ref adapters — halved weight memory, fits V100")
+    else:
+        def load(trainable: bool):
+            base = AutoModelForCausalLM.from_pretrained(
+                args.model, dtype=torch.float16,
+                attn_implementation="sdpa").to("cuda")
+            m = PeftModel.from_pretrained(base, args.sft_adapter,
+                                          is_trainable=trainable)
+            if not trainable:
+                m.eval()
+                for p in m.parameters():
+                    p.requires_grad_(False)
+            return m
 
-    policy = load(trainable=True)
-    reference = load(trainable=False)
+        policy = load(trainable=True)
+        reference = load(trainable=False)
     for p in policy.parameters():           # fp32 master on trainables (recipe)
         if p.requires_grad:
             p.data = p.data.float()
@@ -110,7 +145,11 @@ def main() -> None:
 
     def save(tag: str, step: int = 0) -> None:
         d = os.path.join(args.out_dir, tag)
-        policy.save_pretrained(d)
+        os.makedirs(d, exist_ok=True)
+        if args.shared_ref:                    # policy adapter -> d/policy/
+            policy.save_pretrained(d, selected_adapters=["policy"])
+        else:
+            policy.save_pretrained(d)
         tok.save_pretrained(d)
         torch.save({
             "step": step,
