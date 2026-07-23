@@ -134,6 +134,10 @@ def run_browser_chat(args) -> None:
         browser = pw.chromium.launch(headless=False)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         page.goto(f"file://{html}")
+        # the pennymart global is defined by the storefront's own script tag;
+        # evaluate() can race it on load (and a user reload wipes it mid-wait)
+        page.wait_for_function("typeof window.pennymart !== 'undefined'",
+                               timeout=30_000)
         human = BrowserHuman(page)
 
         class UIHumanEnv(SyntheticCatalogEnvironment):
@@ -208,6 +212,8 @@ def run_browser_chat(args) -> None:
 
         opener = env.reset()          # waits for YOUR first message in the box
         policy.reset()
+        page.wait_for_function("typeof window.pennymart !== 'undefined'",
+                               timeout=30_000)
         page.evaluate(f"pennymart.bubble('user', {json.dumps(opener)})")
         obs = env.observe()
         done = False
