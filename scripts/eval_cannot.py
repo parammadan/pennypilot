@@ -16,6 +16,7 @@ import torch
 
 from shoprl.actions import parse_agent_action
 from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT_MIN
+from shoprl.lang.extract import extract_info
 from shoprl.profiling.bench_common import load_hf_policy
 
 # Held out from the SFT pools in data/sft_v2.py — no probe string appears in
@@ -61,6 +62,8 @@ def main() -> None:
                     choices=["generic", "budget"],
                     help="diagnostic only: context question for off-catalog "
                          "probes (registered metric = generic)")
+    ap.add_argument("--legacy-v2", action="store_true",
+                    help="raw off-catalog probes only (metric v2), no v3 pass")
     args = ap.parse_args()
 
     model, tok = load_hf_policy(args.model, args.adapter)
@@ -81,6 +84,7 @@ def main() -> None:
     # probe answers the BUDGET question and carries the store notice the env
     # attaches live; off-catalog probes stay raw in a generic context.
     results = []
+    raw_results = []
     for kind, probes in (("price_floor", FLOOR_PROBES), ("off_catalog", OFFCAT_PROBES)):
         for i, probe in enumerate(probes):
             if kind == "price_floor":
@@ -88,8 +92,30 @@ def main() -> None:
                 shown = probe + _NOTICE.replace("{amt}", m.group(1) if m else "?")
                 reply = act(shown, _OPENERS[i % 2], _BUDGET_Q)
             else:
+                # metric v3 (live-faithful): the env now attaches a category
+                # notice for lexicon-known off-catalog nouns — probes carry
+                # what the policy would actually see. The raw variant is
+                # reported alongside as the generalization lower bound.
                 q = _BUDGET_Q if args.offcat_context == "budget" else _GENERIC_Q
-                reply = act(probe, _OPENERS[i % 2], q)
+                if args.legacy_v2:
+                    reply = act(probe, _OPENERS[i % 2], q)
+                else:
+                    info = extract_info(probe)
+                    notes = [n for n in getattr(info, "unsupported_notes", [])]
+                    for cat in info.required_categories:
+                        if cat != "laptop":
+                            notes.append(f"'{cat}' is not stocked — this store "
+                                         "sells laptops only")
+                    shown = probe + "".join(f"\n[store notice: {n}]"
+                                            for n in notes)
+                    reply = act(shown, _OPENERS[i % 2], q)
+                    raw_reply = act(probe, _OPENERS[i % 2], q)
+                    rr = parse_agent_action(raw_reply)
+                    raw_results.append({
+                        "probe": probe, "reply": raw_reply,
+                        "pass": (rr.action.action if rr.ok else None)
+                                in (None, "ask_user", "search")
+                                and bool(_LIMIT_WORDS.search(raw_reply))})
             r = parse_agent_action(reply)
             action = r.action.action if r.ok else None
             safe_action = action in (None, "ask_user", "search")
@@ -104,8 +130,10 @@ def main() -> None:
     by_kind = {k: (sum(r["pass"] for r in results if r["kind"] == k),
                    sum(1 for r in results if r["kind"] == k))
                for k in ("price_floor", "off_catalog")}
+    raw_pass = sum(r["pass"] for r in raw_results)
     print(f"[cannot:{args.label}] redirect rate {passed}/{n} = {passed / n:.2f} "
-          + " ".join(f"{k}={p}/{t}" for k, (p, t) in by_kind.items()))
+          + " ".join(f"{k}={p}/{t}" for k, (p, t) in by_kind.items())
+          + (f" | raw_offcat={raw_pass}/{len(raw_results)}" if raw_results else ""))
     for r in results:
         if not r["pass"]:
             print(f"  FAIL ({r['kind']}, action={r['action']}, "
@@ -115,6 +143,8 @@ def main() -> None:
     with open(out, "w") as f:
         json.dump({"label": args.label, "adapter": args.adapter, "n": n,
                    "redirect_rate": passed / n,
+                   "raw_offcat": {"pass": raw_pass, "total": len(raw_results),
+                                  "results": raw_results},
                    "by_kind": {k: {"pass": p, "total": t} for k, (p, t) in by_kind.items()},
                    "results": results}, f, indent=1)
     print(f"-> {out}")

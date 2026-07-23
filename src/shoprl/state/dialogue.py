@@ -29,6 +29,7 @@ class DialogueState(BaseModel):
     code_switched: bool = False
     normalized_english_intent: str = ""
     unsupported_notes: list[str] = Field(default_factory=list)
+    supported_categories: list[str] = Field(default_factory=lambda: ["laptop"])
 
     # Goal + constraints.
     shopping_goal: str = ""
@@ -88,6 +89,10 @@ class DialogueState(BaseModel):
         info = extract_info(text)
         self.normalized_english_intent = english_gloss(info)
         self.unsupported_notes = list(info.unsupported_notes)
+        for cat in info.required_categories:
+            if cat not in self.supported_categories:
+                self.unsupported_notes.append(
+                    f"'{cat}' is not stocked — this store sells laptops only")
 
         if info.budget_total is not None:
             if self.budget_total is not None and info.budget_total != self.budget_total:

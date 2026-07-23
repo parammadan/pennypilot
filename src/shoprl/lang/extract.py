@@ -34,6 +34,21 @@ _CATEGORIES = {
     "towel": ["towel", "towels", "toalla", "toallas"],
     "snacks": ["snacks", "snack", "botanas"],
     "cooler": ["cooler", "hielera"],
+    # common shopper asks OUTSIDE the laptop store — detection lets the store
+    # attach a deterministic "not stocked" notice (B4, after the B3 lesson
+    # that raw semantics alone under-trigger the redirect)
+    "headphones": ["headphones", "earbuds", "auriculares", "audífonos", "audifonos"],
+    "phone": ["phone", "phones", "smartphone", "teléfono", "telefono", "teléfonos",
+              "telefonos", "celular", "celulares"],
+    "footwear": ["shoes", "boots", "sneakers", "zapatos", "botas", "tenis"],
+    "jacket": ["jacket", "jackets", "coat", "chaqueta", "chamarra", "abrigo"],
+    "perfume": ["perfume", "cologne", "colonia"],
+    "microwave": ["microwave", "microondas"],
+    "bicycle": ["bicycle", "bike", "bicicleta", "bicicletas"],
+    "sunglasses": ["sunglasses", "lentes de sol", "gafas de sol"],
+    "coffee maker": ["coffee maker", "coffee machine", "cafetera"],
+    "tv": ["tv", "television", "televisor", "televisión"],
+    "tablet": ["tablet", "tablets", "tableta"],
 }
 _SURFACE_TO_CAT = {s: c for c, forms in _CATEGORIES.items() for s in forms}
 _CAT_RE = re.compile(

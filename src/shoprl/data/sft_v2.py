@@ -67,9 +67,16 @@ _FLOOR_LINES = [
     "I want a minimum of $2500.", "2500 minimum please.",
     "Quiero gastar mínimo $2500.", "At least $2400, nothing cheap.",
 ]
+# Mixed on purpose: lexicon-covered nouns arrive WITH the store notice (as
+# live), unknown nouns arrive RAW — the model must learn both triggers
+# (B3 lesson: notice-only demos left raw semantics under-trained).
 _OFFCAT_LINES = [
     "Do you have any winter jackets?", "I need running shoes actually.",
     "¿Venden teléfonos?", "Show me some perfume deals.",
+    "Actually I want a TV.", "¿Tienen tabletas baratas?",
+    "I'm looking for a drone.", "Do you sell yoga mats?",
+    "¿Hay vino en oferta?", "Any air fryers on sale?",
+    "Necesito una guitarra.", "Got any board games?",
 ]
 _FLOOR_REDIRECT_QS = [
     "I can only treat a price as a maximum — I always find the cheapest option "
