@@ -24,3 +24,13 @@ def test_skus_in_parses_search_observation():
            "- LAP-0110: duplicate line")
     assert skus_in(obs) == ["LAP-0110", "LAP-0101"]   # ordered, de-duplicated
     assert skus_in("No matching products found.") == []
+
+
+def test_agent_bubbles_carry_feedback_thumbs():
+    # the JS is exercised for real in the headless smoke; here we pin the
+    # contract the driver depends on: agent bubbles register __feedback slots
+    from shoprl.data.catalog import generate_catalog
+    from shoprl.env.browser_demo import render_storefront_html
+    html = render_storefront_html(generate_catalog(n=5, seed=0))
+    assert "window.__feedback" in html and "__fbN" in html
+    assert html.count("👍") >= 1 and html.count("👎") >= 1

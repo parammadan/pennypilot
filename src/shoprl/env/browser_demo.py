@@ -200,6 +200,22 @@ window.pennymart = {
       + text + ` — reveal these only when it asks.`; h.style.display="block"; },
   bubble(role, text, note){ const d=document.createElement("div");
     d.className="bubble "+role; d.textContent=text; chat.appendChild(d);
+    if(role==="agent"){
+      // human-feedback capture: one 👍/👎 pair per agent reply, votes land in
+      // window.__feedback [{i, vote, text}] for the driver to harvest
+      const k=(window.__fbN=(window.__fbN||0)+1)-1;
+      const fb=document.createElement("div");
+      fb.style.cssText="margin:-2px 0 4px 6px;font-size:13px;user-select:none";
+      const mk=(sym)=>{const e=document.createElement("span");e.textContent=sym;
+        e.style.cssText="cursor:pointer;opacity:.4;margin-right:10px";return e;};
+      const up=mk("👍"), dn=mk("👎");
+      const vote=(v,me,other)=>{window.__feedback=(window.__feedback||[])
+          .filter(f=>f.i!==k);
+        window.__feedback.push({i:k,vote:v,text:text.slice(0,200)});
+        me.style.opacity=1; other.style.opacity=.2;};
+      up.onclick=()=>vote("up",up,dn); dn.onclick=()=>vote("down",dn,up);
+      fb.appendChild(up); fb.appendChild(dn); chat.appendChild(fb);
+    }
     if(note){ const n=document.createElement("div"); n.className="note";
       n.textContent=note; chat.appendChild(n);} chat.scrollTop=chat.scrollHeight; },
   results(skus){ const by={}; PRODUCTS.forEach(p=>by[p.sku]=p);

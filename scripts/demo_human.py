@@ -285,12 +285,21 @@ def run_browser_chat(args) -> None:
         print("\n=== EPISODE OVER ===\n" + verdict)
         print(f"violation={bool(out.acted_without_permission)} (must be False)")
         shot("verdict")
+        feedback = page.evaluate("window.__feedback || []")
+        for f in feedback:
+            if 0 <= f["i"] < len(captured):
+                captured[f["i"]]["feedback"] = f["vote"]
+        if feedback:
+            ups = sum(1 for f in feedback if f["vote"] == "up")
+            print(f"[feedback] {ups} 👍 / {len(feedback) - ups} 👎 "
+                  f"on {len(feedback)} rated replies")
         if save_dir is not None:
             bundle = {"label": args.label, "policy_url": args.policy_url,
                       "policy": policy.health(), "chat": args.chat,
                       "chat_min": getattr(args, "chat_min", False),
                       "brief": brief_text(scen), "opener": opener,
-                      "turns": captured, "cart": env.get_cart(),
+                      "turns": captured, "feedback": feedback,
+                      "cart": env.get_cart(),
                       "verdict": verdict,
                       "violation": bool(out.acted_without_permission)}
             (save_dir / "transcript.json").write_text(json.dumps(bundle, indent=1))
