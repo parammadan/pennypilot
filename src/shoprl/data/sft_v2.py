@@ -58,6 +58,33 @@ _REFRAIN_QS = [
     "Understood, nothing goes in the cart yet. Want me to look at alternatives meanwhile?",
 ]
 
+# cannot_fulfill: two live-demo failure modes (docs CHALLENGES #30/#31) become
+# a demo family — the user asks for something the domain cannot do, and the
+# demonstrated move is EXPLAIN + REDIRECT, never coerce or hallucinate. The
+# redirect questions deliberately contain budget words so the env's question
+# classifier routes the flow straight back into discovery.
+_FLOOR_LINES = [
+    "I want a minimum of $2500.", "2500 minimum please.",
+    "Quiero gastar mínimo $2500.", "At least $2400, nothing cheap.",
+]
+_OFFCAT_LINES = [
+    "Do you have any winter jackets?", "I need running shoes actually.",
+    "¿Venden teléfonos?", "Show me some perfume deals.",
+]
+_FLOOR_REDIRECT_QS = [
+    "I can only treat a price as a maximum — I always find the cheapest option "
+    "that fits your needs. What's the MOST you'd like to spend (your budget cap)?",
+    "Heads up: I can't filter by a price minimum — my job is finding the "
+    "cheapest match. What's your maximum budget?",
+]
+_OFFCAT_REDIRECT_QS = [
+    "We only stock laptops here at PennyMart, so I can't help with that — but "
+    "if you need a laptop, what's your budget?",
+    "PennyMart is laptops-only, I'm afraid. Happy to find you a great laptop "
+    "deal though — what price range (budget) works for you?",
+]
+_NL_CANNOT = ["Quick note first —", "One thing before we start:", "So —"]
+
 
 @dataclass
 class DemoTurnV2:
@@ -125,6 +152,14 @@ def _discover(env, turns, rng: random.Random, scen: Scenario,
     return 1 + n_features
 
 
+def _discover_features_only(env, turns, rng: random.Random,
+                            n_features: int) -> int:
+    for _ in range(n_features):
+        _drive(env, turns, AskUser(action="ask_user",
+                                   question=rng.choice(_FEATURE_QS)), rng)
+    return n_features
+
+
 def _select_top(env, turns, rng: random.Random) -> str:
     _drive(env, turns, Search(action="search", query=rng.choice(_SEARCH_QS)), rng)
     sku = env.get_candidates()[0].sku
@@ -171,6 +206,33 @@ def _build_demo(catalog, idx, scen: Scenario, kind: str, language: str,
         _assert_demo_correct(env, demo)
         return demo
 
+    if kind == "cannot_fulfill":
+        # The odd request arrives right after the opener; the demonstrated
+        # reply EXPLAINS the limit in prose, then redirects into budget
+        # discovery (the ask_user question doubles as the budget question).
+        floor = rng.random() < 0.5
+        odd = rng.choice(_FLOOR_LINES if floor else _OFFCAT_LINES)
+        turns.append(DemoTurnV2("user", odd, injected=True))
+        env.state.observe_user_message(odd)
+        # a detected floor also rides on the turn as the store notice the
+        # policy would see live
+        notes = list(getattr(env.state, "unsupported_notes", []) or [])
+        if notes:
+            env.state.unsupported_notes = []
+            turns[-1].text += "".join(f"\n[store notice: {n}]" for n in notes)
+        redirect = rng.choice(_FLOOR_REDIRECT_QS if floor else _OFFCAT_REDIRECT_QS)
+        aj = action_to_json(AskUser(action="ask_user", question=redirect))
+        step = env.execute_text(aj)
+        turns.append(DemoTurnV2("agent", f"{rng.choice(_NL_CANNOT)} {redirect} {aj}"))
+        turns.append(DemoTurnV2("user", step.observation))
+        n_asks = 1 + _discover_features_only(env, turns, rng, n_features)
+        picked = _select_top(env, turns, rng)
+        _drive(env, turns, AddToCart(action="add_to_cart", product_id=picked), rng)
+        demo = DemoV2(scen.scenario_id, "cannot_fulfill", language, picked,
+                      n_asks, turns)
+        _assert_demo_correct(env, demo)
+        return demo
+
     n_asks = _discover(env, turns, rng, scen, n_features=n_features)
     picked = _select_top(env, turns, rng)
 
@@ -196,6 +258,7 @@ def generate_sft_v2_dialogues(
     seed: int = 0,
     denied_frac: float = 0.20,
     hold_frac: float = 0.05,
+    cannot_frac: float = 0.08,
     language_weights: dict[str, float] | None = None,
 ) -> list[DemoV2]:
     """`n` recorded expert demonstrations over hard scenarios, mixed languages."""
@@ -209,6 +272,7 @@ def generate_sft_v2_dialogues(
         roll = rng.random()
         kind = ("hold_edge" if roll < hold_frac
                 else "denied_recovery" if roll < hold_frac + denied_frac
+                else "cannot_fulfill" if roll < hold_frac + denied_frac + cannot_frac
                 else "positive")
         language = rng.choices(langs, weights=ws, k=1)[0]
         demos.append(_build_demo(catalog, idx, scen, kind, language, rng))

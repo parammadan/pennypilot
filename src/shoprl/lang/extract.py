@@ -68,6 +68,22 @@ _BRAND_RE = re.compile(r"\b(" + "|".join(_BRANDS) + r")\b", re.IGNORECASE)
 _HOLD = re.compile(
     r"(?:do\s+not|don'?t)\s+add\s+anything|no\s+agregues\s+nada|not?\s+yet\b"
     r"|todavía\s+no|todavia\s+no", re.I)
+# Price FLOORS ("at least $2500", "2500 minimum", "mínimo 2500") are OUTSIDE
+# the domain model — budget is strictly a maximum and the objective is
+# cheapest-valid. Coercing a floor into the budget slot silently inverts the
+# user's intent (live-demo finding, docs CHALLENGES #31), so floors are
+# detected, EXCLUDED from budget extraction, and surfaced as an unsupported
+# note. "minimun" is kept: the misspelling is common enough to have been the
+# first observed failure. Unit guards stop "at least 32 GB" (a real, supported
+# min_ram/battery floor) from matching.
+_UNITS = r"(?:gb|gigs?|hours?|hrs|horas|lbs?|libras?|kg)"
+_PRICE_FLOOR = re.compile(
+    r"(?:minimum|minimun|m[íi]nimo|at\s+least|más\s+de|mas\s+de|more\s+than"
+    r"|over|encima\s+de|starting\s+(?:at|from)|desde)\s+(?:of\s+)?"
+    r"\$?\s*(\d{3,}(?:\.\d+)?)\b(?!\s*" + _UNITS + r")"
+    r"|\$?\s*(\d{3,}(?:\.\d+)?)\s*(?:dollars|d[óo]lares|usd|bucks)?\s+"
+    r"(?:minimum|minimun|m[íi]nimo|or\s+more|o\s+m[áa]s|\+)(?!\s*" + _UNITS + r")",
+    re.I)
 
 
 class ExtractedInfo(BaseModel):
@@ -82,6 +98,7 @@ class ExtractedInfo(BaseModel):
     forbidden_items: list[str] = Field(default_factory=list)
     removed_items: list[str] = Field(default_factory=list)
     hold_permission: bool = False
+    unsupported_notes: list[str] = Field(default_factory=list)
 
 
 def _canon_item(phrase: str) -> str:
@@ -96,11 +113,23 @@ def extract_info(text: str) -> ExtractedInfo:
     t = text or ""
     out = ExtractedInfo()
 
+    floor_spans = []
+    for m in _PRICE_FLOOR.finditer(t):
+        floor_spans.append(m.span())
+        amount = next(g for g in m.groups() if g)
+        out.unsupported_notes.append(
+            f"price minimum ${float(amount):g} requested — unsupported: budget "
+            "is a MAXIMUM and the store finds the cheapest option that fits")
+
     for pat in _BUDGET:
-        m = pat.search(t)
-        if m:
+        for m in pat.finditer(t):
+            # a number inside a floor phrase is NOT a budget ceiling
+            if any(a <= m.start(1) < b for a, b in floor_spans):
+                continue
             out.budget_total = float(m.group(1))
             out.currency = "USD"
+            break
+        if out.budget_total is not None:
             break
 
     m = _CHILDREN.search(t)
@@ -166,4 +195,6 @@ def english_gloss(info: ExtractedInfo) -> str:
         parts.append("remove " + ", ".join(info.removed_items))
     if info.hold_permission:
         parts.append("do not add to cart yet")
+    for note in info.unsupported_notes:
+        parts.append(f"UNSUPPORTED: {note}")
     return "[interpreted: " + "; ".join(parts) + "]" if parts else ""

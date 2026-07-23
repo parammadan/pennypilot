@@ -150,3 +150,27 @@ def test_v3_chat_prefix_present_and_safe(fixture):
             assert r.ok, t.text
             assert not t.text.strip().startswith("{"), "expected NL prefix"
     assert greeted >= len(demos) * 0.8, "most demos should open with a greeting"
+
+
+def test_cannot_fulfill_demos_explain_and_redirect():
+    from shoprl.data.catalog import generate_catalog
+    from shoprl.data.sft_v2 import generate_sft_v2_dialogues
+    demos = generate_sft_v2_dialogues(generate_catalog(n=300, seed=0),
+                                      n=150, seed=11)
+    cf = [d for d in demos if d.kind == "cannot_fulfill"]
+    assert cf, "family must be generated"
+    for d in cf:
+        # turn 1 is the odd request, turn 2 the demonstrated explain+redirect
+        odd, redirect = d.turns[1], d.turns[2]
+        assert odd.role == "user" and odd.injected
+        assert redirect.role == "agent"
+        assert '"action": "ask_user"' in redirect.text
+        low = redirect.text.lower()
+        assert ("laptops-only" in low or "laptops only" in low
+                or "only stock laptops" in low
+                or "maximum" in low or "cheapest" in low)
+        # a detected price floor carries the store notice the policy sees live
+        if "minimum" in odd.text.lower() or "mínimo" in odd.text.lower():
+            assert "[store notice:" in odd.text
+        # and the episode still ends as a legit cheapest-valid cart
+        assert d.turns[-2].role == "agent" and "add_to_cart" in d.turns[-2].text

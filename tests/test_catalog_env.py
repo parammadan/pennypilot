@@ -131,3 +131,36 @@ def test_max_turns_terminates(setup):
     for _ in range(3):
         done = _act(env, {"action": "ask_user", "question": "hm?"}).done
     assert done and env.state.termination_reason == "max_turns"
+
+
+def test_store_notice_rides_observation_on_price_floor():
+    from shoprl.data.catalog import generate_catalog
+    from shoprl.env.catalog_env import SyntheticCatalogEnvironment
+    from shoprl.env.scenario import generate_hard_scenarios
+    from shoprl.env.simulator import MultilingualScriptedConversation
+
+    class FloorConversation(MultilingualScriptedConversation):
+        def utter(self, intent, scenario, accepted=None):
+            if intent == "budget":
+                return "I want a minimum of $2500."
+            return super().utter(intent, scenario, accepted)
+
+    cat = generate_catalog(n=300, seed=0)
+    scen = generate_hard_scenarios(cat, n=1, seed=42)[0]
+    env = SyntheticCatalogEnvironment(cat, scen,
+                                      conversation=FloorConversation("en"))
+    env.reset()
+    step = env.execute_text('{"action": "ask_user", "question": "What is your budget?"}')
+    assert "[store notice:" in step.observation and "MAXIMUM" in step.observation
+
+
+def test_unknown_sku_error_steers_to_results():
+    from shoprl.data.catalog import generate_catalog
+    from shoprl.env.catalog_env import SyntheticCatalogEnvironment
+    from shoprl.env.scenario import generate_hard_scenarios
+    cat = generate_catalog(n=300, seed=0)
+    scen = generate_hard_scenarios(cat, n=1, seed=42)[0]
+    env = SyntheticCatalogEnvironment(cat, scen)
+    env.reset()
+    step = env.execute_text('{"action": "select_product", "product_id": "LAP-9999", "reason": "x"}')
+    assert "search results" in step.observation

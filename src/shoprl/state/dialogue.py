@@ -28,6 +28,7 @@ class DialogueState(BaseModel):
     detected_languages: list[str] = Field(default_factory=list)
     code_switched: bool = False
     normalized_english_intent: str = ""
+    unsupported_notes: list[str] = Field(default_factory=list)
 
     # Goal + constraints.
     shopping_goal: str = ""
@@ -86,6 +87,7 @@ class DialogueState(BaseModel):
         self.code_switched = self.code_switched or det.code_switched
         info = extract_info(text)
         self.normalized_english_intent = english_gloss(info)
+        self.unsupported_notes = list(info.unsupported_notes)
 
         if info.budget_total is not None:
             if self.budget_total is not None and info.budget_total != self.budget_total:

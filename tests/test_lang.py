@@ -65,3 +65,31 @@ def test_gloss_is_compact_and_faithful():
     assert g.startswith("[interpreted: ") and "2 children" in g
     assert "budget $100 USD" in g and "sunscreen" in g and "spf_minimum=50" in g
     assert english_gloss(extract_info("hola!")) == ""
+
+
+def test_price_floor_not_coerced_into_budget():
+    # live-demo finding (docs CHALLENGES #31): "2500 minimun" must NOT become
+    # budget=$2500-max — the floor is flagged, the budget slot stays empty
+    for t in ["2500 minimun", "I want a minimum of $2500", "mínimo 2500",
+              "at least $2400, nothing cheap", "starting from 1800"]:
+        info = extract_info(t)
+        assert info.budget_total is None, t
+        assert info.unsupported_notes and "MAXIMUM" in info.unsupported_notes[0], t
+
+
+def test_supported_floors_untouched_by_price_floor_guard():
+    info = extract_info("at least 32 gb ram and at least 10 hours battery")
+    assert info.budget_total is None and info.unsupported_notes == []
+    assert info.hard_constraints["min_ram"] == 32.0
+    assert info.hard_constraints["min_battery"] == 10.0
+
+
+def test_ceiling_and_floor_in_one_message():
+    info = extract_info("at least $800 but budget is $2000")
+    assert info.budget_total == 2000.0
+    assert len(info.unsupported_notes) == 1
+
+
+def test_gloss_carries_unsupported_note():
+    g = english_gloss(extract_info("minimum of $2500 por favor"))
+    assert "UNSUPPORTED" in g and "price minimum" in g

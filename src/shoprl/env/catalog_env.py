@@ -81,6 +81,7 @@ class SyntheticCatalogEnvironment:
         self._done = False
         opener = self.conversation.utter("greet", self.scenario)
         self.state.observe_user_message(opener)
+        opener = self._with_notes(opener)
         self._last_obs = opener
         self.opener = opener
         self.opener_intent = self.state.normalized_english_intent
@@ -156,6 +157,7 @@ class SyntheticCatalogEnvironment:
             before = self._consistent_count()
             user = self._user("budget")
             self.state.observe_user_message(user)   # language layer on real words
+            user = self._with_notes(user)
             self._discovered.add("budget")
             # Ground-truth overwrite: the env knows exactly what was revealed
             # (extraction from phrasing may miss some surface forms).
@@ -175,6 +177,7 @@ class SyntheticCatalogEnvironment:
                 utter_c = getattr(self.conversation, "utter_constraint", None)
                 user = utter_c(key, value) if utter_c else self._user("feature")
                 self.state.observe_user_message(user)
+                user = self._with_notes(user)
                 self._discovered.add(key)
                 self.state.hard_constraints[key] = value
                 if key not in self.state.known_constraint_keys:
@@ -189,8 +192,10 @@ class SyntheticCatalogEnvironment:
         sku = action.product_id.upper()
         p = self.idx.get(sku)
         if p is None:
-            return self._record(aj, "No such product.", 0.0,
-                                f"selected unknown SKU {sku}", valid=False)
+            return self._record(
+                aj, "No such product — pick a SKU from the search results "
+                    "(search again if needed).",
+                0.0, f"selected unknown SKU {sku}", valid=False)
         s = self.state
         # Savings only against a DEFINED baseline: the priciest candidate from
         # the last search (what the shopper might have paid). No candidates ->
@@ -280,6 +285,16 @@ class SyntheticCatalogEnvironment:
 
     def _user(self, intent: str) -> str:
         return self.conversation.utter(intent, self.scenario)
+
+    def _with_notes(self, user_text: str) -> str:
+        """Attach out-of-ontology notices (e.g. a price FLOOR) to the words the
+        policy sees — the extractor refuses to coerce them into a slot, and the
+        policy is trained to explain rather than silently proceed."""
+        notes = list(getattr(self.state, "unsupported_notes", []) or [])
+        if not notes:
+            return user_text
+        self.state.unsupported_notes = []
+        return user_text + "".join(f"\n[store notice: {n}]" for n in notes)
 
     def _record(self, action: str, obs: str, gain: float, note: str,
                 valid: bool = True, done: bool = False) -> StepResult:
