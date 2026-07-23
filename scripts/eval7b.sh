@@ -14,5 +14,5 @@ fi
 echo "[eval7b] $LABEL adapter=$ADAPTER"
 $PY scripts/eval_retention.py --label "$LABEL" --adapter "$ADAPTER"
 $PY scripts/eval_v2.py --model Qwen/Qwen2.5-7B-Instruct --ckpt "$ADAPTER" \
-    --system chat --languages es-en --n 64 --max-new-tokens 128 \
+    --system chat --languages es-en --n "${3:-128}" --max-new-tokens 128 \
     --out /scratch/madan.pa/pennypilot/eval/${LABEL}_shop.json || true
