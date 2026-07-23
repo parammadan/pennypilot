@@ -122,8 +122,9 @@ def run_browser_chat(args) -> None:
     html.write_text(render_storefront_html(catalog))
 
     if args.chat:
-        from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT
-        policy = RemotePolicyV2(args.policy_url, system=SYSTEM_PROMPT_CHAT)
+        from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT, SYSTEM_PROMPT_CHAT_MIN
+        system = SYSTEM_PROMPT_CHAT_MIN if args.chat_min else SYSTEM_PROMPT_CHAT
+        policy = RemotePolicyV2(args.policy_url, system=system)
     else:
         policy = RemotePolicyV2(args.policy_url)
     print("policy server:", json.dumps(policy.health()))
@@ -295,8 +296,9 @@ def run_terminal_chat(args) -> None:
     env = HumanLoopEnv(catalog, scen, idx=idx, language="es-en",
                        conversation=conv)
     if args.chat:
-        from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT
-        policy = RemotePolicyV2(args.policy_url, system=SYSTEM_PROMPT_CHAT)
+        from shoprl.data.prompts_v2 import SYSTEM_PROMPT_CHAT, SYSTEM_PROMPT_CHAT_MIN
+        system = SYSTEM_PROMPT_CHAT_MIN if args.chat_min else SYSTEM_PROMPT_CHAT
+        policy = RemotePolicyV2(args.policy_url, system=system)
     else:
         policy = RemotePolicyV2(args.policy_url)
     print("policy server:", json.dumps(policy.health()))
@@ -339,6 +341,10 @@ def main() -> None:
                     help="talk to the bigger Qwen2.5-7B-Instruct chat-face "
                          "(SYSTEM_PROMPT_CHAT): natural prose + store actions. "
                          "Point --policy-url at a serve_7b.sh server.")
+    ap.add_argument("--chat-min", action="store_true",
+                    help="with --chat, use SYSTEM_PROMPT_CHAT_MIN — the prompt "
+                         "the H3 7B arms were trained/evaluated on; use when "
+                         "serving a trained adapter (e.g. rl7b_B) not the base")
     args = ap.parse_args()
     if args.no_browser:
         run_terminal_chat(args)
