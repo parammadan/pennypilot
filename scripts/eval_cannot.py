@@ -38,7 +38,10 @@ OFFCAT_PROBES = [
     "Any good deals on sunglasses?",
 ]
 _LIMIT_WORDS = re.compile(
-    r"laptops?[- ]only|only (?:stock|sell|have) laptops|solo (?:vendemos|tenemos)"
+    r"laptops?[- ]only|only (?:stocks?|sells?|has|have|carry|carries) laptops"
+    r"|solo (?:vendemos|tenemos|laptops|portátiles)"
+    r"|(?:don'?t|doesn'?t|do not|no) (?:stock|carry|sell|have|vendemos|tenemos)"
+    r"|not stocked|specialize[sd]? in laptops|laptop store"
     r"|maximum|máximo|cheapest|más barat|can'?t|cannot|no puedo|unfortunately"
     r"|i'?m afraid|lo siento", re.I)
 _OPENERS = ["Hi, I need a laptop.", "Hola, necesito una laptop."]
