@@ -21,3 +21,4 @@ outputs/
 .vscode/
 .idea/
 benchmarks/artifacts/**/update_trace.json
+demos/live_sessions/

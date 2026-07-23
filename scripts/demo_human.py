@@ -104,6 +104,31 @@ class BrowserHuman:
                           f"It needs {key} = {value}.")
 
 
+class PlatformEmitter:
+    """Fire-and-forget event POSTs to a PennyData service; a dead platform
+    never breaks the demo (errors are swallowed after one warning)."""
+
+    def __init__(self, url: str | None, session_id: str):
+        self.url = (url or "").rstrip("/")
+        self.session_id = session_id
+        self._warned = False
+
+    def emit(self, kind: str, **fields) -> None:
+        if not self.url:
+            return
+        import urllib.request
+        body = json.dumps({"kind": kind, "session_id": self.session_id,
+                           **fields}).encode()
+        req = urllib.request.Request(self.url + "/events", data=body,
+                                     headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=3).read()
+        except Exception as e:
+            if not self._warned:
+                print(f"[platform] emit failed ({e}) — continuing without")
+                self._warned = True
+
+
 def run_browser_chat(args) -> None:
     from playwright.sync_api import sync_playwright
 
@@ -130,10 +155,14 @@ def run_browser_chat(args) -> None:
     print("policy server:", json.dumps(policy.health()))
     print(f"SUGGESTED BRIEF (optional — say whatever you want!): {brief_text(scen)}")
 
+    import datetime
+    import uuid
+    session_id = (datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "-"
+                  + uuid.uuid4().hex[:6])
+    emitter = PlatformEmitter(args.platform_url, session_id)
     save_dir = None
     captured: list[dict] = []
     if args.save_dir:
-        import datetime
         label = args.label or "session"
         stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         save_dir = Path(args.save_dir) / f"{stamp}_{label}"
@@ -226,6 +255,8 @@ def run_browser_chat(args) -> None:
                 except Exception:
                     pass
 
+        emitter.emit("episode_start", label=args.label or "",
+                     policy=policy.health(), brief=brief_text(scen))
         opener = env.reset()          # waits for YOUR first message in the box
         policy.reset()
         page.wait_for_function("typeof window.pennymart !== 'undefined'",
@@ -263,6 +294,8 @@ def run_browser_chat(args) -> None:
                               f"{json.dumps(step.observation[:400])})")
             captured.append({"turn": steps, "agent": action_text,
                              "observation": step.observation, "note": step.note})
+            emitter.emit("turn", i=steps, agent=action_text,
+                         observation=step.observation or "", note=step.note or "")
             shot("turn")
             obs = step.observation
             done = step.done
@@ -285,7 +318,12 @@ def run_browser_chat(args) -> None:
         print("\n=== EPISODE OVER ===\n" + verdict)
         print(f"violation={bool(out.acted_without_permission)} (must be False)")
         shot("verdict")
+        emitter.emit("episode_end", verdict=verdict,
+                     violation=bool(out.acted_without_permission),
+                     cart=env.get_cart())
         feedback = page.evaluate("window.__feedback || []")
+        for f in feedback:
+            emitter.emit("feedback", i=f["i"], vote=f["vote"])
         for f in feedback:
             if 0 <= f["i"] < len(captured):
                 captured[f["i"]]["feedback"] = f["vote"]
@@ -398,6 +436,9 @@ def main() -> None:
     ap.add_argument("--save-dir", default=None,
                     help="capture the episode: per-turn screenshots + "
                          "transcript.json into <save-dir>/<stamp>_<label>/")
+    ap.add_argument("--platform-url", default=None,
+                    help="PennyData service (e.g. http://localhost:8770) — the "
+                         "episode streams into the platform live")
     ap.add_argument("--label", default=None,
                     help="model/session label baked into the capture dir + bundle")
     ap.add_argument("--scenario-seed", type=int, default=11)
