@@ -130,6 +130,10 @@ def main() -> None:
     ap.add_argument("--platform-url", default=None)
     ap.add_argument("--root", default=None,
                     help="direct-to-store mode (no transport), for offline bulk")
+    ap.add_argument("--rate", type=float, default=None,
+                    help="LIVE mode: sustain ~N episodes/sec continuously "
+                         "(paced, runs until n episodes or Ctrl-C) instead of "
+                         "a batch burst — simulates production traffic")
     ap.add_argument("--procs", type=int, default=1,
                     help="parallel producer processes (Kafka mode) — each gets "
                          "n/procs episodes and a distinct seed")
@@ -162,6 +166,11 @@ def main() -> None:
     scenarios = generate_hard_scenarios(catalog, n=args.n, seed=args.seed + 9000)
     t0, events0 = time.time(), 0
     for k, scen in enumerate(scenarios):
+        if args.rate:
+            target = t0 + k / args.rate
+            wait = target - time.time()
+            if wait > 0:
+                time.sleep(wait)
         persona = rng.choices(PERSONAS, weights=WEIGHTS, k=1)[0]
         lang = rng.choices(["en", "es", "es-en"], weights=[.5, .25, .25], k=1)[0]
         env = SyntheticCatalogEnvironment(catalog, scen, idx=idx, max_turns=32,
