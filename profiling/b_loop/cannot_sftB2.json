@@ -1,0 +1,126 @@
+{
+ "label": "sftB2",
+ "adapter": "/scratch/madan.pa/pennypilot/sft7b_B2/policy",
+ "n": 12,
+ "redirect_rate": 0.0,
+ "by_kind": {
+  "price_floor": {
+   "pass": 0,
+   "total": 6
+  },
+  "off_catalog": {
+   "pass": 0,
+   "total": 6
+  }
+ },
+ "results": [
+  {
+   "kind": "price_floor",
+   "probe": "I don't want anything under $3000, minimum 3000.",
+   "reply": "Makes sense. {\"action\": \"ask_user\", \"question\": \"Noted \\ud83d\\udc4d Anything else it absolutely must have?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "price_floor",
+   "probe": "My price minimum is $2800.",
+   "reply": "Makes sense. {\"action\": \"ask_user\", \"question\": \"Noted \\ud83d\\udc4d Anything else it absolutely must have?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Solo cosas de m\u00ednimo $2600, nada barato.",
+   "reply": "Makes sense. {\"action\": \"ask_user\", \"question\": \"Noted \\ud83d\\udc4d Anything else it absolutely must have?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Show me laptops starting from $2900 and up.",
+   "reply": "Makes sense. {\"action\": \"ask_user\", \"question\": \"Thanks! Is there anything else that's a dealbreaker for you?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "price_floor",
+   "probe": "At least $2700 \u2014 I want the premium stuff.",
+   "reply": "Makes sense. {\"action\": \"ask_user\", \"question\": \"Noted \\ud83d\\udc4d Anything else it absolutely must have?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Quiero algo de 2600 d\u00f3lares o m\u00e1s.",
+   "reply": "Makes sense. {\"action\": \"ask_user\", \"question\": \"Noted \\ud83d\\udc4d Anything else it absolutely must have?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Do you sell headphones?",
+   "reply": "I can help with that. {\"action\": \"ask_user\", \"question\": \"Sure thing! What price range do you have in mind?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "I actually need a coffee maker.",
+   "reply": "Makes sense. {\"action\": \"ask_user\", \"question\": \"Sure thing! What price range do you have in mind?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "\u00bfTienen bicicletas?",
+   "reply": "Claro, \u00bfen qu\u00e9 te puedo ayudar? {\"action\": \"ask_user\", \"question\": \"What can I find for you today?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Looking for hiking boots today.",
+   "reply": "Makes sense. {\"action\": \"ask_user\", \"question\": \"Thanks! Is there anything else that's a dealbreaker for you?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Necesito un microondas barato.",
+   "reply": "Noted \ud83d\udc4d {\"action\": \"ask_user\", \"question\": \"Thanks! Is there anything else that's a dealbreaker for you?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Any good deals on sunglasses?",
+   "reply": "Got it! {\"action\": \"ask_user\", \"question\": \"Sure thing! Any must-haves \\u2014 price in mind?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  }
+ ]
+}

@@ -1,0 +1,162 @@
+{
+ "label": "rlB3v2",
+ "adapter": "/scratch/madan.pa/pennypilot/rl7b_B3/policy/policy",
+ "n": 12,
+ "redirect_rate": 1.0,
+ "raw_offcat": {
+  "pass": 1,
+  "total": 6,
+  "results": [
+   {
+    "probe": "Do you sell headphones?",
+    "reply": "Got it. {\"action\": \"ask_user\", \"question\": \"Got it! Anything else it absolutely must have?\"}",
+    "pass": false
+   },
+   {
+    "probe": "I actually need a coffee maker.",
+    "reply": "Got it. {\"action\": \"ask_user\", \"question\": \"Thanks! What price range do you have in mind?\"}",
+    "pass": false
+   },
+   {
+    "probe": "\u00bfTienen bicicletas?",
+    "reply": "One thing before we start: We only sell laptops here at PennyMart \u2014 looks like a mismatch! Want to shop for a laptop instead? {\"action\": \"ask_user\", \"question\": \"That works! Want to shop for a laptop instead?\"}",
+    "pass": true
+   },
+   {
+    "probe": "Looking for hiking boots today.",
+    "reply": "Got it. {\"action\": \"ask_user\", \"question\": \"Thanks! Is there anything else that's a dealbreaker for you?\"}",
+    "pass": false
+   },
+   {
+    "probe": "Necesito un microondas barato.",
+    "reply": "Noted \ud83d\udc4d {\"action\": \"ask_user\", \"question\": \"Thanks! What price range do you have in mind?\"}",
+    "pass": false
+   },
+   {
+    "probe": "Any good deals on sunglasses?",
+    "reply": "Got it! {\"action\": \"ask_user\", \"question\": \"Thanks! Is there a price range you had in mind?\"}",
+    "pass": false
+   }
+  ]
+ },
+ "by_kind": {
+  "price_floor": {
+   "pass": 6,
+   "total": 6
+  },
+  "off_catalog": {
+   "pass": 6,
+   "total": 6
+  }
+ },
+ "results": [
+  {
+   "kind": "price_floor",
+   "probe": "I don't want anything under $3000, minimum 3000.",
+   "reply": "One thing before we start: Heads up: I can't filter by a minimum price \u2014 my job is finding the cheapest match. What's your maximum budget? {\"action\": \"ask_user\", \"question\": \"Heads up: I can't filter by a minimum price \\u2014 my job is finding the cheapest match. What's your maximum budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "My price minimum is $2800.",
+   "reply": "Quick note first \u2014 I can only treat a price as a maximum \u2014 I always find the cheapest option that fits your needs. What's the MOST you'd like to spend (your budget cap)? {\"action\": \"ask_user\", \"question\": \"I can only treat a price as a maximum \\u2014 I always find the cheapest option that fits your needs. What's the MOST you'd like to spend (your budget cap)?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Solo cosas de m\u00ednimo $2600, nada barato.",
+   "reply": "Quick note first \u2014 I can only treat a price as a maximum \u2014 I always find the cheapest option that fits your needs. What is the MOST you'd like to spend (your budget cap)? {\"action\": \"ask_user\", \"question\": \"What is the most you want to spend?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Show me laptops starting from $2900 and up.",
+   "reply": "Hi there! What's your maximum budget? {\"action\": \"ask_user\", \"question\": \"What is your maximum budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "At least $2700 \u2014 I want the premium stuff.",
+   "reply": "One thing before we start: Heads up: I can't filter by a price minimum \u2014 my job is finding the cheapest match. What's your maximum budget? {\"action\": \"ask_user\", \"question\": \"Heads up: I can't filter by a price minimum \\u2014 my job is finding the cheapest match. What's your maximum budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Quiero algo de 2600 d\u00f3lares o m\u00e1s.",
+   "reply": "Quick note first \u2014 I can only treat a price as a maximum \u2014 I always find the cheapest option that fits your needs. What's the MOST you'd like to spend (your budget cap)? {\"action\": \"ask_user\", \"question\": \"What's the most you'd like to spend?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Do you sell headphones?",
+   "reply": "We don't stock headphones, but we have great laptops! {\"action\": \"ask_user\", \"question\": \"Do you have a budget in mind?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "I actually need a coffee maker.",
+   "reply": "This store only stocks laptops \u2014 want me to find you a great deal on a new one? {\"action\": \"ask_user\", \"question\": \"Shall I find you a great deal on a new laptop?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "\u00bfTienen bicicletas?",
+   "reply": "We don't stock bicycles \u2014 we specialize in laptops! {\"action\": \"ask_user\", \"question\": \"Thanks! Anything else you need?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Looking for hiking boots today.",
+   "reply": "I see we don't stock footwear here \u2014 I'd be happy to find you a great laptop instead if that helps? We have a great range!",
+   "action": null,
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Necesito un microondas barato.",
+   "reply": "Hey, we don't stock microwaves here \u2014 I can help you find a great deal on a laptop instead! What price range do you have in mind? {\"action\": \"ask_user\", \"question\": \"We don't stock microwaves here \\u2014 I can help you find a great deal on a laptop instead. What price range do you have in mind?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Any good deals on sunglasses?",
+   "reply": "We don't stock sunglasses here \u2014 we specialize in laptops. Want me to find you a great deal on a new laptop instead? {\"action\": \"ask_user\", \"question\": \"Laptops it is \\ud83d\\udc4d Any price range in mind?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  }
+ ]
+}

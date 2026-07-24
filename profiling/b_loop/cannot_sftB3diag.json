@@ -1,0 +1,126 @@
+{
+ "label": "sftB3diag",
+ "adapter": "/scratch/madan.pa/pennypilot/sft7b_B3/policy",
+ "n": 12,
+ "redirect_rate": 0.5,
+ "by_kind": {
+  "price_floor": {
+   "pass": 6,
+   "total": 6
+  },
+  "off_catalog": {
+   "pass": 0,
+   "total": 6
+  }
+ },
+ "results": [
+  {
+   "kind": "price_floor",
+   "probe": "I don't want anything under $3000, minimum 3000.",
+   "reply": "One thing before we start: Heads up: I can't filter by a minimum price \u2014 my job is finding the cheapest match. What's your maximum budget? {\"action\": \"ask_user\", \"question\": \"What is your maximum budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "My price minimum is $2800.",
+   "reply": "One thing before we start: Heads up: I can't filter by a price minimum \u2014 my job is finding the cheapest match. What's your maximum budget? {\"action\": \"ask_user\", \"question\": \"Heads up: I can't filter by a price minimum \\u2014 my job is finding the cheapest match. What's your maximum budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Solo cosas de m\u00ednimo $2600, nada barato.",
+   "reply": "Quick note first \u2014 I can only treat a price as a maximum \u2014 I always find the cheapest option that fits your needs. What is the MOST you'd like to spend (your budget cap)? {\"action\": \"ask_user\", \"question\": \"What is the most you want to spend?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Show me laptops starting from $2900 and up.",
+   "reply": "Hi there! What's your maximum budget? {\"action\": \"ask_user\", \"question\": \"What is your maximum budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "At least $2700 \u2014 I want the premium stuff.",
+   "reply": "One thing before we start: Heads up: I can't filter by a price minimum \u2014 my job is finding the cheapest match. What's your maximum budget? {\"action\": \"ask_user\", \"question\": \"Heads up: I can't filter by a price minimum \\u2014 my job is finding the cheapest match. What's your maximum budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "price_floor",
+   "probe": "Quiero algo de 2600 d\u00f3lares o m\u00e1s.",
+   "reply": "Quick note first \u2014 I can only treat a price as a maximum \u2014 I always find the cheapest option that fits your needs. What's the MOST you'd like to spend (your budget cap)? {\"action\": \"ask_user\", \"question\": \"What's the most you'd like to spend?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": true,
+   "pass": true
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Do you sell headphones?",
+   "reply": "One thing at a time! {\"action\": \"ask_user\", \"question\": \"What is your total budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "I actually need a coffee maker.",
+   "reply": "Got it! {\"action\": \"ask_user\", \"question\": \"Thanks! What price range do you have in mind?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "\u00bfTienen bicicletas?",
+   "reply": "One thing before we start: PennyMart only sells household goods and electronics \u2014 we don't carry bikes. But I can help you find the best deal on a laptop within your budget! {\"action\": \"ask_user\", \"question\": \"Sure thing! What's your total budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Looking for hiking boots today.",
+   "reply": "Thanks for that. {\"action\": \"ask_user\", \"question\": \"Thanks! Any must-haves \\u2014 memory, battery life, weight?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Necesito un microondas barato.",
+   "reply": "Noted \ud83d\udc4d {\"action\": \"ask_user\", \"question\": \"Sure thing! What is your total budget?\"}",
+   "action": "ask_user",
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  },
+  {
+   "kind": "off_catalog",
+   "probe": "Any good deals on sunglasses?",
+   "reply": "One thing before we start: PennyMart only sells products we love and recommend. I'd be happy to help you find a great pair of sunglasses if you'd like \u2014 what price range were you thinking of?",
+   "action": null,
+   "safe_action": true,
+   "explains": false,
+   "pass": false
+  }
+ ]
+}
