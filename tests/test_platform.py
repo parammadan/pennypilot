@@ -115,3 +115,33 @@ def test_http_api_roundtrip(tmp_path):
             assert e.code == 400 and "error" in json.loads(e.read())
     finally:
         httpd.shutdown()
+
+
+def test_ui_events_and_funnel(tmp_path):
+    store = PlatformStore(tmp_path)
+    _episode(store, sid="f1", label="x")
+    store.ingest({"kind": "ui", "session_id": "f1", "type": "hover",
+                  "target": "card:LAP-0001"})
+    store.ingest({"kind": "ui", "session_id": "f1", "type": "modal",
+                  "target": "approve"})
+    from shoprl.platform.quality import funnel
+    st = stats(store)
+    assert st["ui_events"] == {"hover": 1, "modal": 1}
+    f = funnel(store)
+    assert f["episodes"] == 1 and f["engaged"] == 1
+    # rebuild keeps the clickstream (ui_events cleared + replayed)
+    store.rebuild_from_log()
+    assert stats(store)["ui_events"] == {"hover": 1, "modal": 1}
+
+
+def test_synth_traffic_direct_mode(tmp_path):
+    import subprocess, sys
+    r = subprocess.run(
+        [sys.executable, "scripts/synth_traffic.py", "--n", "40",
+         "--root", str(tmp_path)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr[-500:]
+    store = PlatformStore(tmp_path)
+    st = stats(store)
+    assert st["episodes_total"] == 40
+    assert st["funnel"]["engaged"] > 0
+    assert all(v["violations"] == 0 for v in st["per_label"].values())

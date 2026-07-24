@@ -48,8 +48,20 @@ class EpisodeEnd(BaseModel):
     ts: float = Field(default_factory=time.time)
 
 
+class UiEvent(BaseModel):
+    """One raw interaction tick from the storefront UI (click, input, hover,
+    modal action) — the clickstream primitive behavioral analysis runs on."""
+    kind: Literal["ui"] = "ui"
+    session_id: str
+    type: str                        # click | input | hover | modal | tab
+    target: str = ""                 # e.g. "card:LAP-0019", "approve", "search"
+    meta: dict = Field(default_factory=dict)
+    ts: float = Field(default_factory=time.time)
+
+
 EVENT_TYPES = {"episode_start": EpisodeStart, "turn": Turn,
-               "feedback": Feedback, "episode_end": EpisodeEnd}
+               "feedback": Feedback, "episode_end": EpisodeEnd,
+               "ui": UiEvent}
 
 
 def parse_event(obj: dict):

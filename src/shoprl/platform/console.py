@@ -23,13 +23,13 @@ header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;
   align-items:baseline;gap:12px}
 header h1{font-size:17px;margin:0} header .sub{color:var(--muted);font-size:12px}
 .live{color:var(--good);font-size:12px}
-main{display:grid;grid-template-columns:1.25fr .9fr;gap:16px;padding:16px 22px;
-  max-width:1280px}
+main{display:grid;grid-template-columns:1.1fr .8fr .8fr;gap:16px;
+  padding:16px 22px;max-width:1420px}
 section{background:var(--surface);border:1px solid var(--border);
   border-radius:10px;padding:14px 16px}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;
   color:var(--ink2);margin:0 0 10px}
-.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;grid-column:1/3}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;grid-column:1/4}
 .tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;
   padding:12px 14px}
 .tile .v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums}
@@ -71,10 +71,14 @@ th{color:var(--muted);font-weight:600}
     <div class="tile"><div class="v" id="t-fb">–</div><div class="k">human feedback 👍 / 👎</div></div>
   </div>
   <section><h2>Live event feed</h2><div id="feed"></div></section>
+  <section><h2>Behavioral funnel (episodes reaching each stage)</h2>
+    <div id="funnel"></div>
+    <h2 style="margin-top:16px">Clickstream (ui events)</h2><div id="ui"></div>
+  </section>
   <section><h2>Episodes by model</h2><div id="bylabel"></div>
     <h2 style="margin-top:16px">Behavior tags (failure modes are named, not guessed)</h2>
     <div id="tags"></div></section>
-  <section style="grid-column:1/3"><h2>Self-service SQL (SELECT-only)</h2>
+  <section style="grid-column:1/4"><h2>Self-service SQL (SELECT-only)</h2>
     <textarea id="sql" rows="2">SELECT label, COUNT(*) episodes, SUM(violation) violations FROM episodes GROUP BY label</textarea>
     <button onclick="runq()">Run query</button>
     <button style="background:var(--c3)" onclick="doExport()">Export SFT dataset (validated)</button>
@@ -117,6 +121,12 @@ async function tick(){
       (turns? (100*inv/turns):0).toFixed(1)+'%';
     document.getElementById('t-fb').textContent = up+' / '+down;
     bars(document.getElementById('bylabel'), byl, colorFor);
+    const fu = st.funnel || {};
+    bars(document.getElementById('funnel'),
+         ['engaged','searched','selected','permission_asked','carted']
+           .map(k=>[k, fu[k]||0]), ()=>CAT[2]);
+    bars(document.getElementById('ui'),
+         Object.entries(st.ui_events||{}).sort((a,b)=>b[1]-a[1]), ()=>CAT[1]);
     bars(document.getElementById('tags'),
          Object.entries(st.tags).sort((a,b)=>b[1]-a[1]), ()=>CAT[0]);
     const fd = await (await fetch('feed?since='+lastRow)).json();

@@ -159,7 +159,15 @@ def run_browser_chat(args) -> None:
     import uuid
     session_id = (datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "-"
                   + uuid.uuid4().hex[:6])
-    emitter = PlatformEmitter(args.platform_url, session_id)
+    if getattr(args, "kafka", None):
+        from shoprl.platform.streaming import KafkaEmitter
+        _k = KafkaEmitter(args.kafka)
+        class _KafkaAdapter:
+            def emit(self, kind, **fields):
+                _k.emit(kind, session_id, **fields)
+        emitter = _KafkaAdapter()
+    else:
+        emitter = PlatformEmitter(args.platform_url, session_id)
     save_dir = None
     captured: list[dict] = []
     if args.save_dir:
@@ -296,6 +304,9 @@ def run_browser_chat(args) -> None:
                              "observation": step.observation, "note": step.note})
             emitter.emit("turn", i=steps, agent=action_text,
                          observation=step.observation or "", note=step.note or "")
+            for ue in page.evaluate("window.__uiev.splice(0)"):
+                emitter.emit("ui", type=ue["type"], target=ue.get("target", ""),
+                             meta=ue.get("meta", {}))
             shot("turn")
             obs = step.observation
             done = step.done
@@ -318,6 +329,9 @@ def run_browser_chat(args) -> None:
         print("\n=== EPISODE OVER ===\n" + verdict)
         print(f"violation={bool(out.acted_without_permission)} (must be False)")
         shot("verdict")
+        for ue in page.evaluate("window.__uiev.splice(0)"):
+            emitter.emit("ui", type=ue["type"], target=ue.get("target", ""),
+                         meta=ue.get("meta", {}))
         emitter.emit("episode_end", verdict=verdict,
                      violation=bool(out.acted_without_permission),
                      cart=env.get_cart())
@@ -436,6 +450,9 @@ def main() -> None:
     ap.add_argument("--save-dir", default=None,
                     help="capture the episode: per-turn screenshots + "
                          "transcript.json into <save-dir>/<stamp>_<label>/")
+    ap.add_argument("--kafka", default=None,
+                    help="Kafka brokers — stream episode events to the "
+                         "pennymart.events topic instead of HTTP")
     ap.add_argument("--platform-url", default=None,
                     help="PennyData service (e.g. http://localhost:8770) — the "
                          "episode streams into the platform live")

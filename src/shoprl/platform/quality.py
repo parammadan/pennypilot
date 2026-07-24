@@ -64,4 +64,31 @@ def stats(store: PlatformStore) -> dict:
         for t in tag_turn(agent or "", obs or "", note or ""):
             tag_counts[t] = tag_counts.get(t, 0) + 1
     total = db.execute("SELECT COUNT(*) FROM episodes").fetchone()[0]
-    return {"episodes_total": total, "per_label": per_label, "tags": tag_counts}
+    ui = dict(db.execute(
+        "SELECT type, COUNT(*) FROM ui_events GROUP BY type").fetchall())
+    return {"episodes_total": total, "per_label": per_label,
+            "tags": tag_counts, "ui_events": ui,
+            "funnel": funnel(store)}
+
+
+def funnel(store: PlatformStore) -> dict:
+    """Behavioral funnel: how far do conversations get? Each stage counts
+    episodes whose turns reached that action at least once — the drop-off
+    between stages is the decision signal (e.g. many searches but few
+    permission requests = selection is the weak link)."""
+    db = store.db
+    stages = [("engaged", "ask_user"), ("searched", "search"),
+              ("selected", "select_product"),
+              ("permission_asked", "request_cart_permission"),
+              ("carted", "add_to_cart")]
+    total = db.execute("SELECT COUNT(*) FROM episodes").fetchone()[0]
+    out = {"episodes": total}
+    for name, action in stages:
+        out[name] = db.execute(
+            "SELECT COUNT(DISTINCT session_id) FROM turns WHERE action_kind=?",
+            (action,)).fetchone()[0]
+    row = db.execute(
+        "SELECT AVG(c), MIN(c), MAX(c) FROM (SELECT COUNT(*) c FROM turns"
+        " GROUP BY session_id)").fetchone()
+    out["turns_avg"] = round(row[0], 1) if row[0] else 0
+    return out

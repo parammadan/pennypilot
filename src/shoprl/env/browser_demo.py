@@ -240,15 +240,43 @@ window.pennymart = {
     bn.style.display="block"; },
 };
 window.__human = null;
+// clickstream capture: every click / search input / card hover / modal action
+// lands in window.__uiev with a timestamp; the driver drains it each turn.
+window.__uiev = [];
+(function(){
+  const push = (type, target, meta) => window.__uiev.push(
+    {type, target, meta: meta||{}, ts: Date.now()/1000});
+  document.addEventListener("click", e => {
+    const card = e.target.closest("[data-sku]");
+    const btn = e.target.closest("button, .buy, .tab, #send, #approve, #deny");
+    if (card) push("click", "card:"+card.dataset.sku,
+                   {buy: !!e.target.closest(".buy")});
+    else if (btn) push("click", btn.id || btn.textContent.trim().slice(0,24));
+  }, true);
+  const search = document.getElementById("q") || document.querySelector("input[type=search]");
+  if (search) search.addEventListener("change",
+    () => push("input", "search", {q: search.value.slice(0, 80)}));
+  let hoverLast = 0;
+  document.addEventListener("mouseover", e => {
+    const card = e.target.closest("[data-sku]");
+    const now = Date.now();
+    if (card && now - hoverLast > 800){ hoverLast = now;
+      push("hover", "card:"+card.dataset.sku); }
+  }, true);
+})();
 (function(){
   const say = document.getElementById("say");
   const send = document.getElementById("send");
   function submit(){ const v = say.value.trim(); if(!v) return;
+    window.__uiev.push({type:"input", target:"chat",
+                        meta:{len:v.length}, ts:Date.now()/1000});
     say.value=""; window.__human = v; }
   send.onclick = submit;
   say.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
   document.getElementById("approve").addEventListener("click",
-    () => { window.__human = "__yes__"; });
+    () => { window.__uiev.push({type:"modal", target:"approve", meta:{},
+                                ts:Date.now()/1000});
+            window.__human = "__yes__"; });
   document.getElementById("hold").addEventListener("click",
     () => { window.__human = "__no__"; });
 })();

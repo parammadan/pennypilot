@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS turns(
   session_id TEXT, i INTEGER, agent TEXT, observation TEXT, note TEXT,
   action_kind TEXT, feedback TEXT, ts REAL,
   PRIMARY KEY(session_id, i));
+CREATE TABLE IF NOT EXISTS ui_events(
+  session_id TEXT, type TEXT, target TEXT, meta TEXT, ts REAL);
 CREATE TABLE IF NOT EXISTS events(
   rowid INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, session_id TEXT,
   ts REAL, payload TEXT);
@@ -72,6 +74,11 @@ class PlatformStore:
             self.db.execute(
                 "UPDATE turns SET feedback=? WHERE session_id=? AND i=?",
                 (ev.vote, ev.session_id, ev.i))
+        elif ev.kind == "ui":
+            self.db.execute(
+                "INSERT INTO ui_events(session_id, type, target, meta, ts)"
+                " VALUES(?,?,?,?,?)",
+                (ev.session_id, ev.type, ev.target, json.dumps(ev.meta), ev.ts))
         elif ev.kind == "episode_end":
             self.db.execute(
                 "UPDATE episodes SET ended=?, verdict=?, violation=?, cart=?"
@@ -99,7 +106,7 @@ class PlatformStore:
         """Replay events.jsonl into a fresh derived view (source-of-truth demo)."""
         n = 0
         with self._lock:
-            for t in ("episodes", "turns", "events"):
+            for t in ("episodes", "turns", "ui_events", "events"):
                 self.db.execute(f"DELETE FROM {t}")
             if self.log_path.exists():
                 for line in self.log_path.read_text().splitlines():
