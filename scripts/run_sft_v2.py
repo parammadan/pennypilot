@@ -44,6 +44,9 @@ def main() -> None:
                     help="JSONL of {q,a} general-chat exemplars to MIX IN "
                          "(H3 Arm B rehearsal); omit for the specialist arm")
     ap.add_argument("--demos", type=int, default=1000)
+    ap.add_argument("--dataset-file", default=None,
+                    help="train on a recipe-exported dataset (messages JSONL)"
+                         " INSTEAD of generated demos; --rehearsal still mixes")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--catalog-size", type=int, default=300)
     ap.add_argument("--batch-size", type=int, default=2)
@@ -71,8 +74,14 @@ def main() -> None:
 
     os.makedirs(args.out_dir, exist_ok=True)
     catalog = generate_catalog(n=args.catalog_size, seed=0)
-    demos = generate_sft_v2_dialogues(catalog, n=args.demos, seed=args.seed)
-    print(f"[sft-v2] shopping demos: {json.dumps(demo_v2_stats(demos))}")
+    if args.dataset_file:
+        from shoprl.data.sft_v2 import demos_from_messages_jsonl
+        demos = demos_from_messages_jsonl(args.dataset_file)
+        print(f"[sft-v2] recipe dataset: {len(demos)} sequences "
+              f"from {args.dataset_file}")
+    else:
+        demos = generate_sft_v2_dialogues(catalog, n=args.demos, seed=args.seed)
+        print(f"[sft-v2] shopping demos: {json.dumps(demo_v2_stats(demos))}")
     if args.rehearsal:                        # H3 Arm B: mix in general chat
         reh = [json.loads(l) for l in open(args.rehearsal) if l.strip()]
         reh_demos = [DemoV2(scenario_id=f"chat-{i}", kind="rehearsal",

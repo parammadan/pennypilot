@@ -70,3 +70,15 @@ def test_committed_recipe_file_is_valid_draft():
     r = load_recipe("recipes/premature-search-v1.json")
     assert r.approval_status == "draft"           # awaits the human
     assert r.labeling_policy == "outcome_validated_demonstration_v1"
+
+
+def test_recipe_dataset_loads_as_trainer_demos(store, tmp_path):
+    from shoprl.data.sft_v2 import demos_from_messages_jsonl
+    from shoprl.train.sft import demo_to_messages
+    apply_recipe(store, _recipe(), tmp_path / "out")
+    demos = demos_from_messages_jsonl(tmp_path / "out" / "t-v1.jsonl")
+    assert demos and demos[0].kind == "recipe"
+    msgs = demo_to_messages(demos[0])
+    roles = [m["role"] for m in msgs]
+    assert "assistant" in roles and "system" not in roles
+    assert demos[0].turns[0].role in ("user", "agent")

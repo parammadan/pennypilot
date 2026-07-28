@@ -320,6 +320,23 @@ def _assert_demo_correct(env, demo: DemoV2) -> None:
                 f"(value={out.value_quality})")
 
 
+def demos_from_messages_jsonl(path) -> list[DemoV2]:
+    """Load a recipe-exported dataset ({"session_id", "messages": [...]}) as
+    DemoV2 objects the SFT trainer consumes. The system message is dropped
+    (the trainer prepends its own); roles map assistant→agent, user→user."""
+    import json as _json
+    out = []
+    for line in open(path):
+        row = _json.loads(line)
+        turns = [DemoTurnV2("agent" if m["role"] == "assistant" else "user",
+                            m["content"])
+                 for m in row["messages"] if m["role"] != "system"]
+        out.append(DemoV2(scenario_id=row.get("session_id", "recipe"),
+                          kind="recipe", language="", target_sku="",
+                          n_asks=0, turns=turns))
+    return out
+
+
 def demo_v2_stats(demos: list[DemoV2]) -> dict:
     return {
         "count": len(demos),
