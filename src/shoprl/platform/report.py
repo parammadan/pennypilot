@@ -50,7 +50,16 @@ def analyze(store: PlatformStore, min_support: int = 30,
     for metric in ("abandoned", "reformulated", "repeated", "violation"):
         rep = slice_report(sessions, metric=metric, min_support=min_support,
                            top=3)
-        for c in rep["top_slices"]:
+        candidates = list(rep["top_slices"])
+        # cohort (label) slices are first-class: labels ARE the model
+        # versions/arms under comparison, so an adverse label never gets
+        # crowded out by larger-deviation minor slices
+        seen = {tuple(sorted(c["slice"].items())) for c in candidates}
+        for c in slice_report(sessions, metric=metric,
+                              min_support=min_support, top=20)["top_slices"]:
+            if set(c["slice"]) == {"label"} and                     tuple(sorted(c["slice"].items())) not in seen:
+                candidates.append(c)
+        for c in candidates:
             if c["deviation"] <= 0.03:      # only adverse, material deviations
                 continue
             sids = [s["session_id"] for s in sessions

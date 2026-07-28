@@ -130,11 +130,18 @@ def slice_report(sessions: list[dict], metric: str = "abandoned",
             if d != metric and d not in tautology.get(metric, set())]
     keys = [(d,) for d in dims] + [(a, b) for i, a in enumerate(dims)
                                    for b in dims[i + 1:]]
+    # a dimension VALUE covering ~everything (e.g. violation=False when no
+    # violations exist) adds no information — prune slices containing one
+    universal = {(d, v) for d in dims
+                 for v in {s[d] for s in sessions}
+                 if sum(1 for s in sessions if s[d] == v) > 0.9 * n}
     for key in keys:
         groups: dict[tuple, list] = {}
         for s in sessions:
             groups.setdefault(tuple(s[k] for k in key), []).append(s)
         for gv, group in groups.items():
+            if any((k, v) in universal for k, v in zip(key, gv)):
+                continue
             if len(group) < min_support:
                 suppressed += 1
                 continue
