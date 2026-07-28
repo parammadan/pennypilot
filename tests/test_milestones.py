@@ -103,7 +103,8 @@ def test_friction_metrics_provenance(store):
     c = m["customer_correction_rate"]
     assert c["value"] == 0.4
     t = m["turns_to_goal_understood"]
-    assert t["value"] == 3                # last required constraint at turn 3
+    assert t["value"] == 3
+    assert t["by_model_version"]["modelA"]["value"] == 3   # a MEDIAN TURN, not a ratio                # last required constraint at turn 3
     assert "never reached" in t["exclusions"]
     assert p["low_support"] is True       # 5 < MIN_SUPPORT, flagged not hidden
 

@@ -214,12 +214,14 @@ def friction_metrics(store: PlatformStore) -> dict:
                          f"({len(sess) - len(understood)})",
            "window": "all-time", "min_support": MIN_SUPPORT,
            "low_support": len(understood) < MIN_SUPPORT,
-           "by_model_version": per_model(
-               lambda g: (lambda v: v[len(v) // 2] if v else 0)(
-                   sorted(s["goal_understood_turn"] for s in g
-                          if s["goal_understood_turn"] is not None)),
-               lambda g: sum(1 for s in g
-                             if s["goal_understood_turn"] is not None))}
+           "by_model_version": {
+               mv: (lambda v: {"value": v[len(v) // 2] if v else None,
+                               "n": len(v), "eligible": len(v),
+                               "low_support": len(v) < MIN_SUPPORT})(
+                   sorted(s["goal_understood_turn"] for s in sess
+                          if s["model_version"] == mv
+                          and s["goal_understood_turn"] is not None))
+               for mv in sorted({s["model_version"] for s in sess})}}
     return {"freshness_ts": fresh,
             "freshness_age_s": round(time.time() - fresh, 1) if fresh else None,
             "premature_search_rate": premature,
