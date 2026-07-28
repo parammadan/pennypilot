@@ -40,6 +40,8 @@ class KafkaEmitter:
 
     def emit(self, kind: str, session_id: str, **fields) -> None:
         try:
+            import time as _t
+            fields.setdefault("ts", _t.time())   # event time, stamped at source
             self.producer.send(self.topic, key=session_id,
                                value={"kind": kind, "session_id": session_id,
                                       **fields})

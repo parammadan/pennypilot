@@ -190,7 +190,7 @@ def run_browser_chat(args) -> None:
             page.evaluate(
                 "(l)=>{const b=document.createElement('div');"
                 "b.textContent='🧠 '+l;"
-                "b.style.cssText='position:fixed;top:10px;right:14px;z-index:9999;"
+                "b.style.cssText='position:fixed;bottom:12px;left:14px;z-index:9999;"
                 "background:#2a78d6;color:#fff;padding:5px 14px;border-radius:16px;"
                 "font:600 13px -apple-system,system-ui';"
                 "document.body.appendChild(b);}", args.label)
