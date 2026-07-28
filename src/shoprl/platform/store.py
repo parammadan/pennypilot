@@ -45,6 +45,10 @@ class PlatformStore:
         self.db.executescript(
             _SCHEMA.split("CREATE UNIQUE INDEX")[0])   # tables first
         for mig in ("ALTER TABLE turns ADD COLUMN latency_ms REAL",
+                    "ALTER TABLE episodes ADD COLUMN goal TEXT",
+                    "ALTER TABLE episodes ADD COLUMN outcome TEXT",
+                    "ALTER TABLE episodes ADD COLUMN model_version TEXT",
+                    "ALTER TABLE episodes ADD COLUMN scenario_family TEXT",
                     "ALTER TABLE events ADD COLUMN ingest_ts REAL",
                     "ALTER TABLE events ADD COLUMN event_id TEXT",
                     "ALTER TABLE ui_events ADD COLUMN event_id TEXT"):
@@ -80,11 +84,16 @@ class PlatformStore:
 
     def _apply(self, ev) -> None:
         if ev.kind == "episode_start":
+            goal = getattr(ev, "goal", None)
             self.db.execute(
                 "INSERT OR REPLACE INTO episodes(session_id, label, policy_ckpt,"
-                " brief, started) VALUES(?,?,?,?,?)",
+                " brief, started, goal, model_version, scenario_family)"
+                " VALUES(?,?,?,?,?,?,?,?)",
                 (ev.session_id, ev.label, str(ev.policy.get("ckpt", "")),
-                 ev.brief, ev.ts))
+                 ev.brief, ev.ts,
+                 goal.model_dump_json() if goal is not None else None,
+                 getattr(ev, "model_version", "") or ev.label,
+                 getattr(ev, "scenario_family", "")))
         elif ev.kind == "turn":
             r = parse_agent_action(ev.agent)
             action_kind = r.action.action if r.ok else "invalid"
@@ -112,10 +121,12 @@ class PlatformStore:
                 (ev.session_id, ev.event_id, ev.type, ev.turn_index,
                  json.dumps(ev.attributes), ev.source, ev.model_version, ev.ts))
         elif ev.kind == "episode_end":
+            out = getattr(ev, "outcome", None)
             self.db.execute(
-                "UPDATE episodes SET ended=?, verdict=?, violation=?, cart=?"
-                " WHERE session_id=?",
+                "UPDATE episodes SET ended=?, verdict=?, violation=?, cart=?,"
+                " outcome=? WHERE session_id=?",
                 (ev.ts, ev.verdict, int(ev.violation), json.dumps(ev.cart),
+                 out.model_dump_json() if out is not None else None,
                  ev.session_id))
 
     # -- reads -----------------------------------------------------------------

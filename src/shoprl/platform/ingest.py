@@ -16,6 +16,8 @@ import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from shoprl.platform.attribution import attribute_all, attribute_session
+from shoprl.platform.milestones import friction_metrics, milestone_funnel
 from shoprl.platform.behavior import (alerts, data_quality,
                                        detect_anomalies, funnel_by, metrics,
                                        session_features, slice_report,
@@ -82,6 +84,14 @@ def make_handler(store: PlatformStore):
                 elif u.path == "/funnel":
                     self._json(funnel_by(None, store,
                                          label=q.get("label") or None))
+                elif u.path == "/funnel2":
+                    self._json(milestone_funnel(store))
+                elif u.path == "/friction":
+                    self._json(friction_metrics(store))
+                elif u.path == "/attribution":
+                    sid = q.get("session_id")
+                    self._json(attribute_session(store, sid) if sid
+                               else attribute_all(store))
                 elif u.path == "/alerts":
                     self._json(alerts(store))
                 elif u.path == "/timeseries":
