@@ -1,0 +1,27 @@
+{
+ "recipe_id": "premature-search-v1",
+ "schema_version": "recipe-v1",
+ "created": "2026-07-28 23:27 UTC",
+ "dataset_sha256_16": "8dfaaf5d09727b7d",
+ "sequences": 162,
+ "demonstration_candidates": 162,
+ "dropped_duplicates": 0,
+ "dropped_outcome_invalid": 0,
+ "targeting_sessions_informing_slices": 200,
+ "mixture_documented": {
+  "outcome_validated_rl_demonstrations": 0.8,
+  "general_rehearsal": 0.2,
+  "note": "rehearsal mixed at training time via run_sft_v2 --rehearsal (H3-proven ratio)"
+ },
+ "labeling_policy": "outcome_validated_demonstration_v1",
+ "evaluation_slices": [
+  "GRADUAL_CONSTRAINT_REVEAL",
+  "novice",
+  "multilingual",
+  "general_chat_retention"
+ ],
+ "quality_checks": {
+  "violations_in_dataset": 0,
+  "all_outcome_validated": true
+ }
+}

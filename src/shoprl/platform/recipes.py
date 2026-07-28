@@ -77,7 +77,9 @@ def apply_recipe(store: PlatformStore, recipe: Recipe,
     # dedup: one demonstration per scenario (session ids embed scenario order)
     seen, kept, dropped_dup = set(), [], 0
     for s in sorted(demos, key=lambda x: x["session_id"]):
-        key = s["session_id"].rsplit("-", 1)[-1]      # scenario index
+        # scenario identity = (seed batch, index): last TWO id segments —
+        # last-one-alone would wrongly collide across different seed batches
+        key = "-".join(s["session_id"].rsplit("-", 2)[-2:])
         if key in seen:
             dropped_dup += 1
             continue

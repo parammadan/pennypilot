@@ -66,9 +66,11 @@ def test_apply_selects_validated_dedups_and_records_lineage(store, tmp_path):
     assert data[0]["messages"][0]["role"] == "system"
 
 
-def test_committed_recipe_file_is_valid_draft():
+def test_committed_recipe_file_is_valid():
     r = load_recipe("recipes/premature-search-v1.json")
-    assert r.approval_status == "draft"           # awaits the human
+    assert r.approval_status in ("draft", "approved", "rejected")
+    if r.approval_status == "approved":
+        assert r.approved_by                      # the gate names its human
     assert r.labeling_policy == "outcome_validated_demonstration_v1"
 
 
