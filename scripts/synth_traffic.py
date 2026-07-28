@@ -55,8 +55,9 @@ class Sink:
             self._rq.urlopen(req, timeout=5).read()
 
 
-def run_episode(env, sink, sid: str, persona: str, rng: random.Random) -> None:
-    label = f"synth-{persona}"
+def run_episode(env, sink, sid: str, persona: str, rng: random.Random,
+                label: str | None = None) -> None:
+    label = label or f"synth-{persona}"
     sink.emit("episode_start", sid, label=label,
               policy={"ckpt": "scripted/" + persona}, brief="synthetic")
     n_feat = len(env.scenario.all_must_haves)
@@ -130,6 +131,13 @@ def main() -> None:
     ap.add_argument("--platform-url", default=None)
     ap.add_argument("--root", default=None,
                     help="direct-to-store mode (no transport), for offline bulk")
+    ap.add_argument("--label", default=None,
+                    help="cohort label override (e.g. a model version) — "
+                         "personas still vary underneath and are recorded in "
+                         "policy.ckpt, so traffic composition stays auditable")
+    ap.add_argument("--weights", default=None,
+                    help="persona weights expert,impulsive,browser,confused "
+                         "(e.g. 0.3,0.3,0.3,0.1)")
     ap.add_argument("--rate", type=float, default=None,
                     help="LIVE mode: sustain ~N episodes/sec continuously "
                          "(paced, runs until n episodes or Ctrl-C) instead of "
@@ -147,6 +155,8 @@ def main() -> None:
             [sys.executable, __file__, "--n", str(per),
              "--seed", str(args.seed + 100 + p)]
             + (["--kafka", args.kafka] if args.kafka else [])
+            + (["--label", args.label] if args.label else [])
+            + (["--weights", args.weights] if args.weights else [])
             + (["--platform-url", args.platform_url] if args.platform_url else []))
             for p in range(args.procs)]
         codes = [pr.wait() for pr in procs]
@@ -171,13 +181,15 @@ def main() -> None:
             wait = target - time.time()
             if wait > 0:
                 time.sleep(wait)
-        persona = rng.choices(PERSONAS, weights=WEIGHTS, k=1)[0]
+        weights = (tuple(float(x) for x in args.weights.split(","))
+                   if args.weights else WEIGHTS)
+        persona = rng.choices(PERSONAS, weights=weights, k=1)[0]
         lang = rng.choices(["en", "es", "es-en"], weights=[.5, .25, .25], k=1)[0]
         env = SyntheticCatalogEnvironment(catalog, scen, idx=idx, max_turns=32,
                                           language=lang)
         env.reset()
         run_episode(env, sink, f"synth-{args.seed}-{k}-{uuid.uuid4().hex[:6]}",
-                    persona, rng)
+                    persona, rng, label=args.label)
         if (k + 1) % 500 == 0:
             print(f"[synth] {k + 1}/{args.n} episodes, "
                   f"{(k + 1) / (time.time() - t0):.0f} eps/s")

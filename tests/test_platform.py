@@ -223,3 +223,25 @@ def test_failure_analysis_api(tmp_path):
         assert f["stages"][1]["conversion_from_prev"] is not None
     finally:
         httpd.shutdown()
+
+
+def test_automated_analysis_discovers_cohort_regression(tmp_path):
+    import subprocess, sys
+    for label, weights, seed in (("v13", "0.6,0.2,0.15,0.05", 41),
+                                 ("v14", "0.2,0.3,0.35,0.15", 42)):
+        subprocess.run([sys.executable, "scripts/synth_traffic.py", "--n", "300",
+                        "--seed", str(seed), "--root", str(tmp_path),
+                        "--label", label, "--weights", weights],
+                       check=True, capture_output=True)
+    from shoprl.platform.report import analyze, to_markdown
+    r = analyze(PlatformStore(tmp_path))
+    assert r["data_quality"]["verdict"] == "clean"
+    assert r["cohorts"]["v14"]["abandonment"] > r["cohorts"]["v13"]["abandonment"]
+    # the degraded cohort must surface as a ranked abandonment finding
+    assert any(f["metric"] == "abandoned" and f["slice"].get("label") == "v14"
+               for f in r["findings"]), [f["slice"] for f in r["findings"]]
+    for f in r["findings"]:
+        assert "not proven cause" in f["caveats"]
+        assert f["evidence_sessions"], "every finding carries evidence"
+    md = to_markdown(r)
+    assert "## 1. Data quality" in md and "hypotheses, not causes" in md
