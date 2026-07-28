@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -116,6 +117,8 @@ class PlatformEmitter:
     def emit(self, kind: str, **fields) -> None:
         if not self.url:
             return
+        if fields.get("ts") is None:
+            fields.pop("ts", None)
         import urllib.request
         body = json.dumps({"kind": kind, "session_id": self.session_id,
                            **fields}).encode()
@@ -284,7 +287,9 @@ def run_browser_chat(args) -> None:
         done = False
         steps = 0
         while not done and steps < (40 if args.chat else 15):
+            _t0 = time.time()
             action_text = policy.act(obs)
+            latency_ms = round((time.time() - _t0) * 1000, 1)
             exec_text = action_text
             if args.chat and "{" not in action_text:
                 # rehearsal-trained policies answer non-shopping turns as pure
@@ -313,10 +318,17 @@ def run_browser_chat(args) -> None:
             captured.append({"turn": steps, "agent": action_text,
                              "observation": step.observation, "note": step.note})
             emitter.emit("turn", i=steps, agent=action_text,
-                         observation=step.observation or "", note=step.note or "")
+                         observation=step.observation or "", note=step.note or "",
+                         latency_ms=latency_ms)
+            if r.ok and r.action.action == "search":
+                shown = [p_.sku for p_ in env.get_candidates()]
+                if shown:
+                    emitter.emit("ui", type="impression",
+                                 target=",".join(shown[:10]),
+                                 meta={"n": len(shown)})
             for ue in page.evaluate("window.__uiev.splice(0)"):
                 emitter.emit("ui", type=ue["type"], target=ue.get("target", ""),
-                             meta=ue.get("meta", {}))
+                             meta=ue.get("meta", {}), ts=ue.get("ts"))
             shot("turn")
             obs = step.observation
             done = step.done
@@ -341,7 +353,7 @@ def run_browser_chat(args) -> None:
         shot("verdict")
         for ue in page.evaluate("window.__uiev.splice(0)"):
             emitter.emit("ui", type=ue["type"], target=ue.get("target", ""),
-                         meta=ue.get("meta", {}))
+                         meta=ue.get("meta", {}), ts=ue.get("ts"))
         emitter.emit("episode_end", verdict=verdict,
                      violation=bool(out.acted_without_permission),
                      cart=env.get_cart())

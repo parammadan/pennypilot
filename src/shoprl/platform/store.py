@@ -38,6 +38,10 @@ class PlatformStore:
         self.db = sqlite3.connect(str(self.root / "pennydata.db"),
                                   check_same_thread=False)
         self.db.executescript(_SCHEMA)
+        try:
+            self.db.execute("ALTER TABLE turns ADD COLUMN latency_ms REAL")
+        except sqlite3.OperationalError:
+            pass                       # column already there
         self._lock = threading.Lock()
 
     # -- ingestion -------------------------------------------------------------
@@ -66,10 +70,10 @@ class PlatformStore:
             action_kind = r.action.action if r.ok else "invalid"
             self.db.execute(
                 "INSERT OR REPLACE INTO turns(session_id, i, agent, observation,"
-                " note, action_kind, feedback, ts) VALUES(?,?,?,?,?,?,"
-                " (SELECT feedback FROM turns WHERE session_id=? AND i=?), ?)",
+                " note, action_kind, feedback, latency_ms, ts) VALUES(?,?,?,?,?,?,"
+                " (SELECT feedback FROM turns WHERE session_id=? AND i=?), ?, ?)",
                 (ev.session_id, ev.i, ev.agent, ev.observation, ev.note,
-                 action_kind, ev.session_id, ev.i, ev.ts))
+                 action_kind, ev.session_id, ev.i, ev.latency_ms, ev.ts))
         elif ev.kind == "feedback":
             self.db.execute(
                 "UPDATE turns SET feedback=? WHERE session_id=? AND i=?",

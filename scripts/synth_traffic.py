@@ -82,6 +82,10 @@ def run_episode(env, sink, sid: str, persona: str, rng: random.Random,
         drive(action_to_json(AskUser(action="ask_user", question=q)), i); i += 1
     drive(action_to_json(Search(action="search", query="matching laptops")), i); i += 1
     cands = env.get_candidates()
+    if cands:
+        sink.emit("ui", sid, type="impression",
+                  target=",".join(p.sku for p in cands[:10]),
+                  meta={"n": len(cands)})
     for sku in [p.sku for p in cands[:rng.randint(1, 3)]]:
         sink.emit("ui", sid, type="hover", target=f"card:{sku}")
     if persona == "browser" or not cands:

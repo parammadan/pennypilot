@@ -28,6 +28,7 @@ class Turn(BaseModel):
     agent: str                       # full agent text (prose + action JSON)
     observation: str = ""            # what came back (user words / store output)
     note: str = ""                   # env note ("revealed budget", "invalid …")
+    latency_ms: float | None = None  # wall time of the policy call (operational)
     ts: float = Field(default_factory=time.time)
 
 

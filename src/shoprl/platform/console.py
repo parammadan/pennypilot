@@ -84,6 +84,8 @@ button.act{background:var(--c1);border:0;color:#fff;border-radius:6px;
   <span style="color:var(--muted);font-size:12px">open data platform · fed live by the PennyMart store via Kafka</span>
   <span class="badge ok" id="dq">data: …</span>
   <span class="badge" id="live" style="color:var(--good)">● live</span></header>
+<div id="alertbar" style="display:none;padding:9px 22px;font-size:13px;
+  font-weight:600;color:#fff"></div>
 <nav id="nav"></nav>
 <div class="filters">cohort <select id="f-label"><option value="">all</option></select>
   &nbsp; slice metric <select id="f-metric">
@@ -98,6 +100,12 @@ button.act{background:var(--c1);border:0;color:#fff;border-radius:6px;
     <div class="tile"><div class="v" id="t-aband">–</div><div class="k">abandonment</div></div>
     <div class="tile"><div class="v" id="t-reform">–</div><div class="k">reformulation</div></div>
     <div class="tile"><div class="v" id="t-fb">–</div><div class="k">feedback 👍/👎</div></div>
+  </div>
+  <div class="tiles" style="grid-template-columns:repeat(4,1fr)">
+    <div class="tile"><div class="v" id="t-ctr">–</div><div class="k">recommendation CTR</div></div>
+    <div class="tile"><div class="v" id="t-h2c">–</div><div class="k">hover → click</div></div>
+    <div class="tile"><div class="v" id="t-dur">–</div><div class="k">median session (s)</div></div>
+    <div class="tile"><div class="v" id="t-lat">–</div><div class="k">agent latency p50</div></div>
   </div>
   <div class="duo">
     <div class="card"><h2>Sessions over time</h2><div id="ch-vol"></div></div>
@@ -208,6 +216,14 @@ async function refresh(){
     const dq=$("dq");dq.textContent="data: "+b.data_quality.verdict;
     dq.className="badge "+(b.data_quality.verdict==="clean"?"ok":"bad");
     $("updated").textContent="updated "+new Date().toLocaleTimeString();
+    const al=await j("alerts");
+    const ab=$("alertbar");
+    if(al.length){const crit=al.some(a=>a.severity==="CRITICAL");
+      ab.style.display="block";
+      ab.style.background=crit?"var(--critical)":"var(--warning)";
+      ab.style.color=crit?"#fff":"#4a3f10";
+      ab.textContent=al.map(a=>`${a.severity==="CRITICAL"?"🚨":"⚠️"} ${a.name}: ${a.detail}`).join("   ·   ");
+    } else ab.style.display="none";
     const st=await j("stats");
     const labels=Object.keys(st.per_label);
     const sel=$("f-label");
@@ -223,6 +239,10 @@ async function refresh(){
       $("t-reform").textContent=pct(m.reformulation.value);
       let up=0,dn=0;for(const v of Object.values(st.per_label)){up+=v.thumbs_up;dn+=v.thumbs_down;}
       $("t-fb").textContent=up+" / "+dn;
+      $("t-ctr").textContent=pct(m.recommendation_ctr?.value);
+      $("t-h2c").textContent=pct(m.hover_to_click?.value);
+      $("t-dur").textContent=m.session_duration_s?.value!=null?m.session_duration_s.value.toFixed(0):"–";
+      $("t-lat").textContent=m.agent_latency_ms_p50?.value!=null?(m.agent_latency_ms_p50.value/1000).toFixed(1)+"s":"–";
       const ts=await j("timeseries?metric=abandoned&bucket=120");
       lineChart($("ch-vol"),ts.series.map(p=>({t:p.t,v:p.n,n:p.n})),CAT[0],v=>v.toFixed(0));
       lineChart($("ch-rate"),ts.series.map(p=>({t:p.t,v:p.rate,n:p.n})),CAT[1],pct);

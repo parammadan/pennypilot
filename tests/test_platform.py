@@ -260,3 +260,26 @@ def test_timeseries_anomaly_detection(tmp_path):
     # a flat series flags nothing
     assert detect_anomalies([{"t": i, "n": 50, "rate": 0.2}
                              for i in range(8)]) == []
+
+
+def test_cx_metrics_and_alerts(tmp_path):
+    import subprocess, sys
+    subprocess.run([sys.executable, "scripts/synth_traffic.py", "--n", "120",
+                    "--root", str(tmp_path)], check=True, capture_output=True)
+    from shoprl.platform.behavior import alerts, metrics, session_features
+    store = PlatformStore(tmp_path)
+    m = metrics(session_features(store))
+    assert m["recommendation_ctr"]["value"] is not None
+    assert "impression = eligible" in m["recommendation_ctr"]["denominator"]
+    assert m["hover_to_click"]["value"] is not None
+    assert alerts(store) == []          # healthy synth traffic: no alerts
+    # a violation must fire the CRITICAL emergency alert
+    store.ingest({"kind": "episode_start", "session_id": "bad", "label": "x"})
+    store.ingest({"kind": "turn", "session_id": "bad", "i": 0,
+                  "agent": '{"action": "add_to_cart", "product_id": "LAP-1"}',
+                  "observation": ""})
+    store.ingest({"kind": "episode_end", "session_id": "bad",
+                  "violation": True, "cart": ["LAP-1"]})
+    al = alerts(store)
+    assert any(a["severity"] == "CRITICAL" and a["name"] == "permission_violation"
+               for a in al), al

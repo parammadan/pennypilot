@@ -41,13 +41,18 @@ def session_features(store: PlatformStore) -> list[dict]:
                     "duration_s": round(ended - started, 1)
                     if started and ended else None,
                     "turns": 0, "asks": 0, "searches": 0, "invalid": 0,
-                    "user_msgs": [], "reformulated": False, "repeated": False}
-    for sid, action_kind, obs in db.execute(
-            "SELECT session_id, action_kind, observation FROM turns ORDER BY i"):
+                    "user_msgs": [], "reformulated": False, "repeated": False,
+                    "latencies": [], "impressions": 0, "card_clicks": 0,
+                    "hovers": 0}
+    for sid, action_kind, obs, lat in db.execute(
+            "SELECT session_id, action_kind, observation, latency_ms"
+            " FROM turns ORDER BY i"):
         s = out.get(sid)
         if s is None:
             continue
         s["turns"] += 1
+        if lat is not None:
+            s["latencies"].append(lat)
         if action_kind == "ask_user":
             s["asks"] += 1
         elif action_kind == "search":
@@ -56,6 +61,20 @@ def session_features(store: PlatformStore) -> list[dict]:
             s["invalid"] += 1
         if obs:
             s["user_msgs"].append(obs)
+    for sid, typ, n in db.execute(
+            "SELECT session_id, type, COUNT(*) FROM ui_events GROUP BY 1, 2"):
+        s = out.get(sid)
+        if s is None:
+            continue
+        if typ == "impression":
+            s["impressions"] += n
+        elif typ == "hover":
+            s["hovers"] += n
+    for sid, n in db.execute(
+            "SELECT session_id, COUNT(*) FROM ui_events"
+            " WHERE type='click' AND target LIKE 'card:%' GROUP BY 1"):
+        if sid in out:
+            out[sid]["card_clicks"] = n
     for s in out.values():
         msgs = [re.sub(r"\s+", " ", m).strip().lower()
                 for m in s.pop("user_msgs") if len(m) >= _REPEAT_MIN_LEN]
@@ -110,7 +129,29 @@ def metrics(sessions: list[dict]) -> dict:
         "violation": rate("violation", "sessions with a permission violation",
                           "all sessions",
                           sum(s["violation"] for s in sessions), n),
+        # ---- CX metrics (impressions/latency instrumented 2026-07-28) ----
+        "recommendation_ctr": rate(
+            "ctr", "sessions clicking a shown product card",
+            "sessions where results were SHOWN (impression = eligible)",
+            sum(1 for s in sessions if s["impressions"] and s["card_clicks"]),
+            sum(1 for s in sessions if s["impressions"])),
+        "hover_to_click": rate("hover→click", "card clicks", "card hovers",
+                               sum(s["card_clicks"] for s in sessions),
+                               sum(s["hovers"] for s in sessions)),
+        "session_duration_s": _median_stat(
+            [s["duration_s"] for s in sessions if s["duration_s"]],
+            "median completed-session duration (s)"),
+        "agent_latency_ms_p50": _median_stat(
+            [l for s in sessions for l in s["latencies"]],
+            "median policy-call wall time (ms) — operational, human "
+            "sessions only (synthetic turns carry no latency)"),
     }
+
+
+def _median_stat(vals: list, what: str) -> dict:
+    vals = sorted(vals)
+    return {"value": vals[len(vals) // 2] if vals else None,
+            "numerator": what, "denominator": f"{len(vals)} measurements"}
 
 
 def slice_report(sessions: list[dict], metric: str = "abandoned",
@@ -214,6 +255,46 @@ def data_quality(store: PlatformStore) -> dict:
             "flags_over_5pct": flags,
             "verdict": "SUSPECT — validate instrumentation before reading "
                        "any behavioral metric" if flags else "clean"}
+
+
+ALERT_RULES_DOC = """CRITICAL fires the emergency banner; WARNING informs.
+Rules are behavioral+operational, and every alert names its evidence."""
+
+
+def alerts(store: PlatformStore) -> list[dict]:
+    out = []
+    dq = data_quality(store)
+    if dq["verdict"] != "clean":
+        out.append({"severity": "CRITICAL", "name": "data_quality",
+                    "detail": f"instrumentation suspect: {dq['flags_over_5pct']}"
+                              " — validate data before reading any metric"})
+    sessions = session_features(store)
+    n = len(sessions)
+    viol = sum(s["violation"] for s in sessions)
+    if viol:
+        out.append({"severity": "CRITICAL", "name": "permission_violation",
+                    "detail": f"{viol} session(s) breached the permission gate"
+                              " — the safety invariant; inspect immediately"})
+    inv_turns = sum(s["invalid"] for s in sessions)
+    turns = sum(s["turns"] for s in sessions)
+    if turns and inv_turns / turns > 0.10:
+        out.append({"severity": "WARNING", "name": "invalid_action_rate",
+                    "detail": f"invalid actions at {inv_turns / turns:.0%} of"
+                              f" turns (n={turns}) — parser or policy drift"})
+    anom = detect_anomalies(timeseries(store, "abandoned", 120))
+    if anom:
+        a = anom[-1]
+        out.append({"severity": "WARNING", "name": "abandonment_shift",
+                    "detail": f"time-bucket anomaly: rate {a['rate']:.0%} vs"
+                              f" median {a['baseline_median']:.0%}"
+                              f" ({a['deviations']} robust deviations,"
+                              f" n={a['n']})"})
+    lats = sorted(l for s in sessions for l in s["latencies"])
+    if len(lats) >= 10 and lats[len(lats) // 2] > 20000:
+        out.append({"severity": "WARNING", "name": "agent_latency",
+                    "detail": f"median policy latency {lats[len(lats)//2]/1000:.1f}s"
+                              " — users abandon slow agents"})
+    return out
 
 
 def timeseries(store: PlatformStore, metric: str = "abandoned",
