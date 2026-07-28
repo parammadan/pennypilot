@@ -188,15 +188,11 @@ def run_browser_chat(args) -> None:
         page.wait_for_function("typeof window.pennymart !== 'undefined'",
                                timeout=30_000)
         if args.label:
-            # who am I talking to? — badge + title so A/B windows are unambiguous
+            # the assistant is Penny; the model tag sits right of her name
             page.evaluate(f"document.title = {json.dumps(args.label + ' — PennyMart')}")
             page.evaluate(
-                "(l)=>{const b=document.createElement('div');"
-                "b.textContent='🧠 '+l;"
-                "b.style.cssText='position:fixed;bottom:12px;left:14px;z-index:9999;"
-                "background:#2a78d6;color:#fff;padding:5px 14px;border-radius:16px;"
-                "font:600 13px -apple-system,system-ui';"
-                "document.body.appendChild(b);}", args.label)
+                "(l)=>{const t=document.getElementById('modeltag');"
+                "if(t) t.textContent=l;}", args.label)
         human = BrowserHuman(page)
 
         class UIHumanEnv(SyntheticCatalogEnvironment):

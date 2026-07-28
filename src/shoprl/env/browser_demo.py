@@ -127,7 +127,10 @@ def render_storefront_html(catalog,
                   background:#fff; font-weight:600; cursor:pointer; }
   #modal button.approve { background:var(--btn); border-color:#a88734; }
 </style></head><body>
-<aside id="chat"><h2>Assistant</h2><div id="msgs"></div>
+<aside id="chat"><h2 id="chathead">Penny <span id="modeltag"
+  style="font-size:11px;font-weight:600;color:#fff;background:#2a78d6;
+  padding:2px 9px;border-radius:11px;vertical-align:2px"></span></h2>
+<div id="msgs"></div>
   <div id="saybar"><input id="say" placeholder="…" autocomplete="off">
   <button id="send">Send</button></div></aside>
 <main id="store">
