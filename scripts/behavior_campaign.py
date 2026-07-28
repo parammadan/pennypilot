@@ -73,7 +73,8 @@ class FakeRudePolicy:
 
 
 def run_campaign(policy, label: str, n: int, seed: int, out_path: str,
-                 languages=("en", "es", "es-en")) -> dict:
+                 languages=("en", "es", "es-en"),
+                 frustration_limit: int = 3, family_tag: str = "") -> dict:
     catalog = generate_catalog(n=300, seed=0)
     idx = catalog_index(catalog)
     scenarios = generate_hard_scenarios(catalog, n=n, seed=seed)
@@ -84,7 +85,8 @@ def run_campaign(policy, label: str, n: int, seed: int, out_path: str,
     for k, scen in enumerate(scenarios):
         sid = f"camp-{label}-{seed}-{k}"
         lang = languages[k % len(languages)]
-        sim = AdaptiveCustomer(scen, seed=seed * 1000 + k, language=lang)
+        sim = AdaptiveCustomer(scen, seed=seed * 1000 + k, language=lang,
+                               frustration_limit=frustration_limit)
         env = SyntheticCatalogEnvironment(catalog, scen, idx=idx,
                                           max_turns=MAX_TURNS,
                                           conversation=sim)
@@ -98,7 +100,8 @@ def run_campaign(policy, label: str, n: int, seed: int, out_path: str,
             events.append({"kind": kind, "session_id": sid,
                            "model_version": label, **f})
 
-        emit("episode_start", label=label, scenario_family=FAMILY,
+        emit("episode_start", label=label,
+             scenario_family=family_tag or FAMILY,
              source="SYSTEM", policy={"ckpt": label},
              goal={"goal_text": "cheapest laptop meeting my requirements",
                    "budget_max": float(scen.hidden_budget),
@@ -176,6 +179,8 @@ def main() -> None:
     ap.add_argument("--max-new-tokens", type=int, default=128)
     ap.add_argument("--fake-policy", choices=["good", "rude"], default=None,
                     help="CPU test double instead of a real model")
+    ap.add_argument("--frustration-limit", type=int, default=3)
+    ap.add_argument("--family-tag", default="")
     args = ap.parse_args()
 
     if args.fake_policy:
@@ -188,7 +193,9 @@ def main() -> None:
         model, tok = load_hf_policy(args.model, args.adapter)
         policy = HFPolicyV2(model, tok, system=SYSTEM_PROMPT_CHAT_MIN,
                             max_new_tokens=args.max_new_tokens)
-    run_campaign(policy, args.label, args.n, args.seed, args.out)
+    run_campaign(policy, args.label, args.n, args.seed, args.out,
+                 frustration_limit=args.frustration_limit,
+                 family_tag=args.family_tag)
 
 
 if __name__ == "__main__":
