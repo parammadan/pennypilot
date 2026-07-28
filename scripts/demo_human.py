@@ -284,8 +284,16 @@ def run_browser_chat(args) -> None:
         steps = 0
         while not done and steps < (40 if args.chat else 15):
             _t0 = time.time()
+            try:
+                page.evaluate("pennymart.busy && pennymart.busy(true)")
+            except Exception:
+                pass
             action_text = policy.act(obs)
             latency_ms = round((time.time() - _t0) * 1000, 1)
+            try:
+                page.evaluate("pennymart.busy && pennymart.busy(false)")
+            except Exception:
+                pass
             exec_text = action_text
             if args.chat and "{" not in action_text:
                 # rehearsal-trained policies answer non-shopping turns as pure

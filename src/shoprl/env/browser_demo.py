@@ -126,17 +126,63 @@ def render_storefront_html(catalog,
   #modal button { padding:9px 18px; border-radius:999px; border:1px solid #888c8c;
                   background:#fff; font-weight:600; cursor:pointer; }
   #modal button.approve { background:var(--btn); border-color:#a88734; }
+  .card { transition: box-shadow .18s, transform .18s; cursor:pointer; }
+  .card:hover { box-shadow:0 6px 20px rgba(15,17,17,.12); transform:translateY(-1px);
+                position:relative; z-index:2; background:#fff; }
+  .card .buy { cursor:pointer; transition:background .15s; }
+  .card .buy:hover { background:var(--btn2); }
+  .bubble { animation: pop .18s ease-out; display:flex; gap:8px; align-items:flex-start; }
+  @keyframes pop { from { opacity:0; transform:translateY(5px);} to {opacity:1;} }
+  .bubble .av { flex:0 0 24px; height:24px; border-radius:50%; display:flex;
+                align-items:center; justify-content:center; font-size:13px;
+                background:#fff3d6; }
+  .bubble.agent .av { background:#e3edfb; }
+  .bubble .tx { flex:1; }
+  .bubble .tm { display:block; color:#9aa0a6; font-size:10px; margin-top:3px; }
+  #typing { display:none; padding:8px 12px; }
+  #typing .dot { display:inline-block; width:7px; height:7px; margin-right:4px;
+                 border-radius:50%; background:#8ab4f8; animation:blink 1.2s infinite; }
+  #typing .dot:nth-child(2){ animation-delay:.2s } #typing .dot:nth-child(3){ animation-delay:.4s }
+  @keyframes blink { 0%,80%,100% {opacity:.25} 40% {opacity:1} }
+  #say:disabled { background:#f4f4f4; }
+  header .cart { cursor:pointer; }
+  #drawer { position:fixed; top:0; right:-360px; width:350px; height:100vh;
+            background:#fff; box-shadow:-8px 0 26px rgba(15,17,17,.18); z-index:60;
+            transition:right .25s ease; padding:18px; display:flex; flex-direction:column; }
+  #drawer.open { right:0; }
+  #drawer h3 { font-size:17px; margin-bottom:12px; }
+  #drawer .item { display:flex; gap:10px; align-items:center; padding:10px 0;
+                  border-bottom:1px solid #eee; }
+  #drawer .item svg { width:64px; height:44px; }
+  #drawer .sub { margin-top:auto; padding-top:12px; border-top:2px solid #0f1111;
+                 font-size:16px; font-weight:700; display:flex; justify-content:space-between; }
+  #drawer .close { position:absolute; top:10px; right:14px; font-size:20px;
+                   cursor:pointer; color:#565959; border:0; background:none; }
+  #drawer .checkout { margin-top:10px; padding:10px; text-align:center; border-radius:999px;
+                      background:var(--btn); border:1px solid #a88734; font-weight:600; }
+  #drawer .empty { color:var(--muted); text-align:center; margin-top:40px; }
+  #detail { display:none; position:fixed; inset:0; background:rgba(15,17,17,.5);
+            align-items:center; justify-content:center; z-index:55; }
+  #detail .box { background:#fff; border-radius:10px; padding:24px; width:560px;
+                 display:grid; grid-template-columns:220px 1fr; gap:20px; }
+  #detail .box svg { width:200px; height:140px; }
+  #detail table { font-size:13px; border-collapse:collapse; margin:10px 0; }
+  #detail td { padding:3px 10px 3px 0; color:var(--muted); }
+  #detail td+td { color:var(--ink); font-weight:600; }
+  #toast { position:fixed; bottom:22px; right:22px; background:#0f1111ee; color:#fff;
+           padding:11px 18px; border-radius:9px; font-size:13px; display:none; z-index:70; }
 </style></head><body>
 <aside id="chat"><h2 id="chathead">Penny <span id="modeltag"
   style="font-size:11px;font-weight:600;color:#fff;background:#2a78d6;
   padding:2px 9px;border-radius:11px;vertical-align:2px"></span></h2>
 <div id="msgs"></div>
+  <div id="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
   <div id="saybar"><input id="say" placeholder="…" autocomplete="off">
   <button id="send">Send</button></div></aside>
 <main id="store">
   <header><span class="logo">Penny<em>Mart</em></span>
-    <div id="search"><input placeholder="Search PennyMart"><div class="go">🔍</div></div>
-    <span class="cart">🛒 Cart <b id="cartn">0</b></span></header>
+    <div id="search"><input id="q" placeholder="Search PennyMart"><div class="go" id="qgo">🔍</div></div>
+    <span class="cart" id="cartbtn">🛒 Cart <b id="cartn">0</b></span></header>
   <div id="subnav"><span>All</span><span>Laptops</span><span>Deals</span>
     <span class="sim">● SIMULATED — no real purchases, stylized images</span></div>
   <div id="banner"></div>
@@ -144,6 +190,12 @@ def render_storefront_html(catalog,
   <div id="resultbar"></div>
   <div id="grid"></div>
 </main>
+<div id="drawer"><button class="close" id="drawerx">✕</button>
+  <h3>🛒 Your Cart</h3><div id="drawer-items"></div>
+  <div class="sub"><span>Subtotal</span><span id="drawer-total">$0.00</span></div>
+  <div class="checkout">Proceed to checkout (simulated)</div></div>
+<div id="detail"><div class="box"><div id="detail-art"></div><div id="detail-info"></div></div></div>
+<div id="toast"></div>
 <div id="modal"><div class="box"><h3>Add to your cart?</h3>
   <div id="modal-body"></div><div class="reply" id="modal-reply"></div>
   <div class="actions"><button id="hold">Not now</button>
@@ -202,7 +254,13 @@ window.pennymart = {
     h.innerHTML = `🎫 <b>Demo hint (only you see this — the assistant does NOT):</b> `
       + text + ` — reveal these only when it asks.`; h.style.display="block"; },
   bubble(role, text, note){ const d=document.createElement("div");
-    d.className="bubble "+role; d.textContent=text; chat.appendChild(d);
+    d.className="bubble "+role;
+    const tm = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    const av = document.createElement("div"); av.className="av";
+    av.textContent = role==="agent" ? "🛍️" : "🧑";
+    const tx = document.createElement("div"); tx.className="tx"; tx.textContent=text;
+    const t = document.createElement("span"); t.className="tm"; t.textContent=tm;
+    tx.appendChild(t); d.appendChild(av); d.appendChild(tx); chat.appendChild(d);
     if(role==="agent"){
       // human-feedback capture: one 👍/👎 pair per agent reply, votes land in
       // window.__feedback [{i, vote, text}] for the driver to harvest
@@ -237,11 +295,63 @@ window.pennymart = {
     document.getElementById("modal").style.display="flex"; },
   closeModal(){ document.getElementById("modal").style.display="none"; },
   hint(h){ const s=document.getElementById("say"); s.placeholder=h; s.focus(); },
-  addToCart(sku){ document.getElementById("cartn").textContent="1";
-    const bn=document.getElementById("banner");
-    bn.textContent=`✓ Added to Cart — ${sku} (simulated, with your explicit permission)`;
-    bn.style.display="block"; },
+  busy(on){ document.getElementById("typing").style.display = on?"block":"none";
+    const s=document.getElementById("say"); s.disabled=!!on;
+    if(on) chat.scrollTop=chat.scrollHeight; },
+  addToCart(sku){ const by={}; PRODUCTS.forEach(p=>by[p.sku]=p);
+    window.__cart=(window.__cart||[]); if(by[sku]) window.__cart.push(by[sku]);
+    document.getElementById("cartn").textContent=String(window.__cart.length);
+    renderCart();
+    const t=document.getElementById("toast");
+    t.textContent=`✓ Added to cart — ${by[sku]?by[sku].name:sku} (simulated, with your explicit permission)`;
+    t.style.display="block"; setTimeout(()=>t.style.display="none", 4200); },
 };
+function renderCart(){
+  const items=window.__cart||[];
+  const el=document.getElementById("drawer-items");
+  el.innerHTML = items.length ? items.map(p=>`<div class="item">${laptopSVG(p)}
+    <div><div style="font-weight:600">${p.name}</div>
+    <div style="color:#565959;font-size:12px">${p.sku}</div></div>
+    <div style="margin-left:auto;font-weight:700">$${p.price.toFixed(2)}</div></div>`).join("")
+    : '<div class="empty">Your cart is empty.<br>Penny adds items only with your permission.</div>';
+  document.getElementById("drawer-total").textContent =
+    "$"+items.reduce((a,p)=>a+p.price,0).toFixed(2); }
+function openDetail(p){
+  document.getElementById("detail-art").innerHTML = laptopSVG(p);
+  document.getElementById("detail-info").innerHTML = `<h3 style="font-size:20px">${p.name}</h3>
+    ${rateline(p)}${priceHTML(p.price)}
+    <table><tr><td>RAM</td><td>${p.ram_gb} GB</td></tr>
+    <tr><td>Battery</td><td>${p.battery_hrs} hours</td></tr>
+    <tr><td>Weight</td><td>${p.weight_lbs} lb</td></tr>
+    <tr><td>Brand</td><td>${p.brand}</td></tr>
+    <tr><td>SKU</td><td>${p.sku}</td></tr></table>
+    <div class="deliv">FREE delivery <b>tomorrow</b> · <span style="color:#067d62">In stock</span></div>
+    <div style="margin-top:10px;color:#565959;font-size:12px">Ask Penny to add it —
+    nothing enters your cart without your explicit permission.</div>`;
+  document.getElementById("detail").style.display="flex"; }
+document.getElementById("detail").addEventListener("click", e=>{
+  if(e.target.id==="detail") e.target.style.display="none"; });
+document.getElementById("cartbtn").onclick=()=>{renderCart();
+  window.__uiev.push({type:"click", target:"cart_open", meta:{}, ts:Date.now()/1000});
+  document.getElementById("drawer").classList.add("open");};
+document.getElementById("drawerx").onclick=()=>document.getElementById("drawer").classList.remove("open");
+(function(){
+  const q=document.getElementById("q");
+  const run=()=>{const v=q.value.trim().toLowerCase();
+    window.__uiev.push({type:"input", target:"search", meta:{q:v.slice(0,80)}, ts:Date.now()/1000});
+    if(!v){pennymart.all();return;}
+    const hits=PRODUCTS.filter(p=>(p.name+" "+p.brand+" "+p.sku).toLowerCase().includes(v));
+    document.getElementById("resultbar").innerHTML=`<b>${hits.length}</b> results for “${q.value}”`;
+    show(hits);};
+  q.addEventListener("keydown", e=>{if(e.key==="Enter") run();});
+  document.getElementById("qgo").onclick=run;
+})();
+document.getElementById("grid").addEventListener("click", e=>{
+  const el=e.target.closest("[data-sku]"); if(!el) return;
+  if(e.target.closest(".buy")) return;      // buy stays with Penny's flow
+  const by={}; PRODUCTS.forEach(p=>by[p.sku]=p);
+  const p=by[el.dataset.sku]; if(p){ openDetail(p);
+    window.__uiev.push({type:"click", target:"detail:"+p.sku, meta:{}, ts:Date.now()/1000}); }});
 window.__human = null;
 // clickstream capture: every click / search input / card hover / modal action
 // lands in window.__uiev with a timestamp; the driver drains it each turn.
