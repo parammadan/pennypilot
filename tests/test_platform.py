@@ -145,3 +145,27 @@ def test_synth_traffic_direct_mode(tmp_path):
     assert st["episodes_total"] == 40
     assert st["funnel"]["engaged"] > 0
     assert all(v["violations"] == 0 for v in st["per_label"].values())
+
+
+def test_s3_archiver_batching_and_layout():
+    from shoprl.platform.s3_sink import S3Archiver
+
+    class FakeS3:
+        def __init__(self):
+            self.puts = []
+        def put_object(self, Bucket, Key, Body):
+            self.puts.append((Bucket, Key, Body))
+
+    s3 = FakeS3()
+    arch = S3Archiver("b", batch_size=3, max_age_s=9999, s3=s3)
+    flushed = [arch.add({"kind": "ui", "i": i}) for i in range(7)]
+    assert flushed == [False, False, True, False, False, True, False]
+    arch.flush()
+    assert arch.parts_written == 3 and arch.events_written == 7
+    assert all(k.startswith("pennydata/events/date=") and k.endswith(".jsonl")
+               for _, k, _ in s3.puts)
+    # parts are newline-delimited JSON, replayable
+    import json as j
+    total = sum(len([l for l in body.decode().splitlines() if l])
+                for _, _, body in s3.puts)
+    assert total == 7 and j.loads(s3.puts[0][2].decode().splitlines()[0])["i"] == 0
