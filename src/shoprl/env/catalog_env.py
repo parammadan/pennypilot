@@ -185,10 +185,29 @@ class SyntheticCatalogEnvironment:
             info_gains=[t.info_gain for t in self.turns],
             scenario=self.scenario, idx=self.idx)
 
-    def _sem(self, type_: str, **attrs) -> None:
+    def _sem(self, type_: str, source: str = "AGENT", **attrs) -> str:
+        import uuid
+        eid = uuid.uuid4().hex
         self.pending_events.append(
             {"type": type_, "turn_index": len(self.turns) + 1,
-             "attributes": attrs, "source": "AGENT"})
+             "attributes": attrs, "source": source, "event_id": eid})
+        return eid
+
+    def reveal_constraint(self, key: str) -> None:
+        """A customer CORRECTION reveals a hidden constraint (truth path —
+        same bookkeeping as an agent-elicited reveal)."""
+        if key in self._discovered:
+            return
+        self._discovered.add(key)
+        if key == "budget":
+            self.state.budget_total = self.scenario.hidden_budget
+        else:
+            value = self.scenario.all_must_haves[key]
+            self.state.hard_constraints[key] = value
+            if key not in self.state.known_constraint_keys:
+                self.state.known_constraint_keys.append(key)
+        self._sem("constraint_revealed", source="CUSTOMER", key=key,
+                  via="correction")
 
     def _required(self) -> list[str]:
         return ["budget"] + list(self.scenario.all_must_haves)
@@ -196,9 +215,11 @@ class SyntheticCatalogEnvironment:
     # -- action handlers -------------------------------------------------------
     def _ask(self, aj: str, question: str) -> StepResult:
         fld = self._classify_question(question)
-        self._sem("constraint_requested",
-                  field=fld, redundant=(fld == "budget" and "budget"
-                                        in self._discovered))
+        redundant = ((fld == "budget" and "budget" in self._discovered)
+                     or (fld == "feature" and all(
+                         k in self._discovered
+                         for k in self.scenario.all_must_haves)))
+        self._sem("constraint_requested", field=fld, redundant=redundant)
         if fld == "budget" and "budget" not in self._discovered:
             before = self._consistent_count()
             user = self._user("budget")
