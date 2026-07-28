@@ -16,8 +16,9 @@ import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from shoprl.platform.behavior import (data_quality, funnel_by, metrics,
-                                       session_features, slice_report)
+from shoprl.platform.behavior import (data_quality, detect_anomalies,
+                                       funnel_by, metrics, session_features,
+                                       slice_report, timeseries)
 from shoprl.platform.console import CONSOLE_HTML
 from shoprl.platform.export import build_dataset
 from shoprl.platform.quality import stats
@@ -80,6 +81,11 @@ def make_handler(store: PlatformStore):
                 elif u.path == "/funnel":
                     self._json(funnel_by(None, store,
                                          label=q.get("label") or None))
+                elif u.path == "/timeseries":
+                    ser = timeseries(store, metric=q.get("metric", "abandoned"),
+                                     bucket_s=int(q.get("bucket", 300)))
+                    self._json({"series": ser,
+                                "anomalies": detect_anomalies(ser)})
                 elif u.path == "/sessions":
                     # failure-analysis API (Lesson 7): hand the underlying
                     # sessions matching a behavioral condition to a human

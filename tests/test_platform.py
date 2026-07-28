@@ -245,3 +245,18 @@ def test_automated_analysis_discovers_cohort_regression(tmp_path):
         assert f["evidence_sessions"], "every finding carries evidence"
     md = to_markdown(r)
     assert "## 1. Data quality" in md and "hypotheses, not causes" in md
+
+
+def test_timeseries_anomaly_detection(tmp_path):
+    from shoprl.platform.behavior import detect_anomalies
+    # stable series with one genuine shift and one low-n spike (must NOT flag)
+    series = ([{"t": i, "n": 100, "rate": 0.10 + (i % 3) * 0.01}
+               for i in range(10)]
+              + [{"t": 10, "n": 100, "rate": 0.55}]     # real shift
+              + [{"t": 11, "n": 5, "rate": 0.90}])      # tiny bucket = noise
+    hits = detect_anomalies(series, min_n=20)
+    assert len(hits) == 1 and hits[0]["t"] == 10
+    assert hits[0]["deviations"] > 4
+    # a flat series flags nothing
+    assert detect_anomalies([{"t": i, "n": 50, "rate": 0.2}
+                             for i in range(8)]) == []

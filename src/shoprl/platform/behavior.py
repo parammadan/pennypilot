@@ -214,3 +214,38 @@ def data_quality(store: PlatformStore) -> dict:
             "flags_over_5pct": flags,
             "verdict": "SUSPECT — validate instrumentation before reading "
                        "any behavioral metric" if flags else "clean"}
+
+
+def timeseries(store: PlatformStore, metric: str = "abandoned",
+               bucket_s: int = 300) -> list[dict]:
+    """Metric per time bucket (episode start time). The unit stays SESSIONS —
+    each bucket reports rate + n, so low-n buckets are visibly low-evidence."""
+    sessions = session_features(store)
+    starts = dict(store.db.execute(
+        "SELECT session_id, started FROM episodes WHERE started IS NOT NULL"))
+    buckets: dict[int, list] = {}
+    for s in sessions:
+        t = starts.get(s["session_id"])
+        if t is None:
+            continue
+        buckets.setdefault(int(t // bucket_s) * bucket_s, []).append(s[metric])
+    return [{"t": k, "n": len(v), "rate": round(sum(v) / len(v), 4)}
+            for k, v in sorted(buckets.items())]
+
+
+def detect_anomalies(series: list[dict], min_n: int = 20,
+                     mad_k: float = 4.0) -> list[dict]:
+    """Robust shift detection: flag buckets whose rate deviates from the
+    median by > mad_k robust deviations. Median/MAD, not mean/std — one bad
+    bucket must not drag the baseline toward itself. Low-n buckets are never
+    flagged (an 'anomaly' of 3 sessions is noise — same discipline as slice
+    min-support)."""
+    eligible = [p for p in series if p["n"] >= min_n]
+    if len(eligible) < 4:
+        return []
+    rates = sorted(p["rate"] for p in eligible)
+    med = rates[len(rates) // 2]
+    mad = sorted(abs(r - med) for r in rates)[len(rates) // 2] or 0.02
+    return [{**p, "baseline_median": med,
+             "deviations": round(abs(p["rate"] - med) / mad, 1)}
+            for p in eligible if abs(p["rate"] - med) > mad_k * mad]

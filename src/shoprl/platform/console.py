@@ -78,6 +78,9 @@ th{color:var(--muted);font-weight:600}
   <section><h2>Episodes by model</h2><div id="bylabel"></div>
     <h2 style="margin-top:16px">Behavior tags (failure modes are named, not guessed)</h2>
     <div id="tags"></div></section>
+  <section style="grid-column:1/4"><h2>Automated analysis
+    <span id="dqbadge" style="margin-left:8px;font-size:11px"></span></h2>
+    <div id="findings" class="note">loading…</div></section>
   <section style="grid-column:1/4"><h2>Self-service SQL (SELECT-only)</h2>
     <textarea id="sql" rows="2">SELECT label, COUNT(*) episodes, SUM(violation) violations FROM episodes GROUP BY label</textarea>
     <button onclick="runq()">Run query</button>
@@ -163,5 +166,29 @@ async function doExport(){
   a.href = URL.createObjectURL(blob); a.download = 'pennydata_sft.jsonl'; a.click();
   document.getElementById('qout').innerHTML =
     '<pre style="font-size:12px">'+JSON.stringify(r.report,null,1)+'</pre>'; }
+async function analysis(){
+  try{
+    const b = await (await fetch('behavior')).json();
+    const dq = b.data_quality;
+    const badge = document.getElementById('dqbadge');
+    badge.textContent = 'data: ' + dq.verdict;
+    badge.style.color = dq.verdict === 'clean' ? 'var(--good)' : 'var(--critical)';
+    const sl = await (await fetch('slices?metric=abandoned&top=4')).json();
+    const an = await (await fetch('timeseries?metric=abandoned')).json();
+    let html = '';
+    if (an.anomalies.length)
+      html += `<div style="color:var(--critical)">⚠ ${an.anomalies.length} `
+        + `time-bucket anomaly(ies) on abandonment — latest rate `
+        + `${an.anomalies.at(-1).rate} vs median ${an.anomalies.at(-1).baseline_median}</div>`;
+    html += (sl.top_slices||[]).filter(c => c.deviation > 0.03).map(c =>
+      `<div style="margin:4px 0"><b>${(100*c.value).toFixed(0)}%</b> vs `
+      + `${(100*c.baseline).toFixed(0)}% — <code>${JSON.stringify(c.slice)}</code> `
+      + `<span style="color:var(--muted)">n=${c.support}</span></div>`).join('');
+    html += `<div class="note">${sl.note||''}</div>`;
+    document.getElementById('findings').innerHTML =
+      html || '<div class="note">no adverse slices above support threshold</div>';
+  }catch(e){}
+}
 setInterval(tick, 2000); tick();
+setInterval(analysis, 6000); analysis();
 </script></body></html>"""
