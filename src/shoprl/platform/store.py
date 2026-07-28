@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS ui_events(
   session_id TEXT, type TEXT, target TEXT, meta TEXT, ts REAL);
 CREATE TABLE IF NOT EXISTS events(
   rowid INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, session_id TEXT,
-  ts REAL, payload TEXT);
+  ts REAL, ingest_ts REAL, event_id TEXT, payload TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_eid ON events(event_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ui_eid ON ui_events(event_id);
 """
 
 
@@ -37,24 +39,39 @@ class PlatformStore:
         self.log_path = self.root / "events.jsonl"
         self.db = sqlite3.connect(str(self.root / "pennydata.db"),
                                   check_same_thread=False)
+        self.db.executescript(
+            _SCHEMA.split("CREATE UNIQUE INDEX")[0])   # tables first
+        for mig in ("ALTER TABLE turns ADD COLUMN latency_ms REAL",
+                    "ALTER TABLE events ADD COLUMN ingest_ts REAL",
+                    "ALTER TABLE events ADD COLUMN event_id TEXT",
+                    "ALTER TABLE ui_events ADD COLUMN event_id TEXT"):
+            try:
+                self.db.execute(mig)
+            except sqlite3.OperationalError:
+                pass                   # column already there (or fresh schema)
         self.db.executescript(_SCHEMA)
-        try:
-            self.db.execute("ALTER TABLE turns ADD COLUMN latency_ms REAL")
-        except sqlite3.OperationalError:
-            pass                       # column already there
         self._lock = threading.Lock()
 
     # -- ingestion -------------------------------------------------------------
     def ingest(self, raw: dict) -> str:
-        """Validate + persist one event; returns its kind."""
+        """Validate + persist one event; returns its kind, or "duplicate" —
+        an event_id seen before is skipped ENTIRELY (idempotent under Kafka
+        redelivery and log re-ingestion)."""
+        import time as _t
         ev = parse_event(raw)
         with self._lock:
+            eid = getattr(ev, "event_id", None)
+            if eid and self.db.execute(
+                    "SELECT 1 FROM events WHERE event_id=?", (eid,)).fetchone():
+                return "duplicate"
             with self.log_path.open("a") as f:
                 f.write(ev.model_dump_json() + "\n")
             self._apply(ev)
             self.db.execute(
-                "INSERT INTO events(kind, session_id, ts, payload) VALUES(?,?,?,?)",
-                (ev.kind, ev.session_id, ev.ts, ev.model_dump_json()))
+                "INSERT INTO events(kind, session_id, ts, ingest_ts, event_id,"
+                " payload) VALUES(?,?,?,?,?,?)",
+                (ev.kind, ev.session_id, ev.ts, _t.time(), eid,
+                 ev.model_dump_json()))
             self.db.commit()
         return ev.kind
 
@@ -80,9 +97,10 @@ class PlatformStore:
                 (ev.vote, ev.session_id, ev.i))
         elif ev.kind == "ui":
             self.db.execute(
-                "INSERT INTO ui_events(session_id, type, target, meta, ts)"
-                " VALUES(?,?,?,?,?)",
-                (ev.session_id, ev.type, ev.target, json.dumps(ev.meta), ev.ts))
+                "INSERT OR IGNORE INTO ui_events(session_id, type, target,"
+                " meta, ts, event_id) VALUES(?,?,?,?,?,?)",
+                (ev.session_id, ev.type, ev.target, json.dumps(ev.meta),
+                 ev.ts, getattr(ev, "event_id", None)))
         elif ev.kind == "episode_end":
             self.db.execute(
                 "UPDATE episodes SET ended=?, verdict=?, violation=?, cart=?"
@@ -117,9 +135,10 @@ class PlatformStore:
                     ev = parse_event(json.loads(line))
                     self._apply(ev)
                     self.db.execute(
-                        "INSERT INTO events(kind, session_id, ts, payload)"
-                        " VALUES(?,?,?,?)",
-                        (ev.kind, ev.session_id, ev.ts, ev.model_dump_json()))
+                        "INSERT OR IGNORE INTO events(kind, session_id, ts,"
+                        " event_id, payload) VALUES(?,?,?,?,?)",
+                        (ev.kind, ev.session_id, ev.ts,
+                         getattr(ev, "event_id", None), ev.model_dump_json()))
                     n += 1
             self.db.commit()
         return n

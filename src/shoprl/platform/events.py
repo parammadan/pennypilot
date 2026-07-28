@@ -7,12 +7,29 @@ append-only; the relational view (store.py) is derived and rebuildable.
 from __future__ import annotations
 
 import time
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
-class EpisodeStart(BaseModel):
+def _eid() -> str:
+    return uuid.uuid4().hex
+
+
+class Envelope(BaseModel):
+    """Fields every platform event carries. `event_id` is the identity used
+    for idempotent application — redelivery/replay of the same id is a no-op.
+    `ts` is EVENT time (stamped at the source); ingest time is recorded by
+    the store, never by the producer."""
+    event_id: str = Field(default_factory=_eid)
+    source: str = ""                 # AGENT | CUSTOMER | STORE_UI | SIMULATOR | SYSTEM
+    model_version: str = ""
+    prompt_version: str = ""
+    request_id: str = ""
+
+
+class EpisodeStart(Envelope):
     kind: Literal["episode_start"] = "episode_start"
     session_id: str
     label: str = ""                  # which model/arm served it (e.g. "7b-B2")
@@ -21,7 +38,7 @@ class EpisodeStart(BaseModel):
     ts: float = Field(default_factory=time.time)
 
 
-class Turn(BaseModel):
+class Turn(Envelope):
     kind: Literal["turn"] = "turn"
     session_id: str
     i: int                           # 0-based agent-turn index
@@ -32,7 +49,7 @@ class Turn(BaseModel):
     ts: float = Field(default_factory=time.time)
 
 
-class Feedback(BaseModel):
+class Feedback(Envelope):
     kind: Literal["feedback"] = "feedback"
     session_id: str
     i: int                           # agent-turn index the vote refers to
@@ -40,7 +57,7 @@ class Feedback(BaseModel):
     ts: float = Field(default_factory=time.time)
 
 
-class EpisodeEnd(BaseModel):
+class EpisodeEnd(Envelope):
     kind: Literal["episode_end"] = "episode_end"
     session_id: str
     verdict: str = ""
@@ -49,7 +66,7 @@ class EpisodeEnd(BaseModel):
     ts: float = Field(default_factory=time.time)
 
 
-class UiEvent(BaseModel):
+class UiEvent(Envelope):
     """One raw interaction tick from the storefront UI (click, input, hover,
     modal action) — the clickstream primitive behavioral analysis runs on."""
     kind: Literal["ui"] = "ui"

@@ -283,3 +283,39 @@ def test_cx_metrics_and_alerts(tmp_path):
     al = alerts(store)
     assert any(a["severity"] == "CRITICAL" and a["name"] == "permission_violation"
                for a in al), al
+
+
+def test_event_idempotency_duplicate_changes_no_metric(tmp_path):
+    from shoprl.platform.behavior import metrics, session_features
+    store = PlatformStore(tmp_path)
+    ev_start = {"kind": "episode_start", "session_id": "d1", "label": "m",
+                "event_id": "E-START"}
+    ev_turn = {"kind": "turn", "session_id": "d1", "i": 0,
+               "agent": f"Hi {AJ}", "observation": "budget $900",
+               "event_id": "E-TURN"}
+    ev_ui = {"kind": "ui", "session_id": "d1", "type": "click",
+             "target": "card:LAP-1", "event_id": "E-UI"}
+    for ev in (ev_start, ev_turn, ev_ui):
+        assert store.ingest(dict(ev)) != "duplicate"
+    before_m = metrics(session_features(store))
+    before_ui = store.query("SELECT COUNT(*) FROM ui_events")["rows"][0][0]
+    # redeliver ALL of them (same event_id) — Kafka at-least-once simulation
+    for ev in (ev_start, ev_turn, ev_ui):
+        assert store.ingest(dict(ev)) == "duplicate"
+        assert store.ingest(dict(ev)) == "duplicate"
+    assert metrics(session_features(store)) == before_m
+    assert store.query("SELECT COUNT(*) FROM ui_events")["rows"][0][0] == before_ui
+    assert store.query("SELECT COUNT(*) FROM events")["rows"][0][0] == 3
+
+
+def test_old_jsonl_without_envelope_still_replays(tmp_path):
+    store = PlatformStore(tmp_path)
+    # pre-envelope log lines (no event_id/source/model_version)
+    (tmp_path / "events.jsonl").write_text("\n".join([
+        '{"kind": "episode_start", "session_id": "old1", "label": "legacy", "brief": "b", "ts": 1.0, "policy": {}}',
+        '{"kind": "turn", "session_id": "old1", "i": 0, "agent": "x", "observation": "y", "note": "", "ts": 2.0}',
+        '{"kind": "episode_end", "session_id": "old1", "verdict": "v", "violation": false, "cart": [], "ts": 3.0}',
+    ]) + "\n")
+    n = store.rebuild_from_log()
+    assert n == 3
+    assert store.query("SELECT label FROM episodes")["rows"] == [["legacy"]]
