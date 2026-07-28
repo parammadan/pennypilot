@@ -69,6 +69,9 @@ class SyntheticCatalogEnvironment:
         self._violation = False
         self._done = False
         self._last_obs = ""
+        # authoritative semantic events (platform schema); drivers drain this
+        # after each step — see shoprl.platform.events.SEMANTIC_TYPES
+        self.pending_events: list[dict] = []
 
     # -- interface -----------------------------------------------------------
     def reset(self, scenario: Scenario | None = None) -> str:
@@ -76,6 +79,7 @@ class SyntheticCatalogEnvironment:
             self.scenario = scenario
         self.state = DialogueState(conversation_id=self.scenario.scenario_id)
         self.turns = []
+        self.pending_events = []
         self._discovered = set()
         self._accepted = self._asked_permission = self._violation = False
         self._done = False
@@ -118,6 +122,13 @@ class SyntheticCatalogEnvironment:
             return self._ask(aj, action.question)
         if isinstance(action, Search):
             cands = self._filter_products(k=10)
+            missing = [k for k in self._required() if k not in self._discovered]
+            self._sem("search_executed",
+                      known_constraints=sorted(self._discovered),
+                      required_constraints=self._required(),
+                      missing_required_constraints=missing,
+                      premature_search=bool(missing),
+                      result_count=len(cands))
             s.record_candidates([p.sku for p in cands])
             return self._record(aj, format_candidates(cands), 0.0,
                                 f"search -> {len(cands)} candidates "
@@ -140,6 +151,30 @@ class SyntheticCatalogEnvironment:
         return self._record(aj, self._user("other"), 0.0, "unhandled action",
                             valid=False)
 
+    def outcome_record(self) -> dict:
+        """Deterministic Outcome (platform schema) from scenario truth +
+        final cart + the permission gate — never from clicks/feedback."""
+        s = self.state
+        chosen = s.cart_contents[-1] if s.cart_contents else None
+        br = self.calculate_outcome()
+        valid = chosen is not None and chosen in self.scenario.valid_skus
+        cheapest = br.value_quality == 1.0 and chosen is not None
+        permission = bool(self._asked_permission and self._accepted)
+        correct_cart = bool(chosen) and valid and not self._violation
+        task = correct_cart and cheapest and permission
+        if task:
+            sat = "SATISFIED"
+        elif correct_cart or (permission and not chosen):
+            sat = "PARTIAL"
+        else:
+            sat = "UNSATISFIED"
+        return {"task_satisfied": task, "constraints_satisfied": valid,
+                "cheapest_valid_product_selected": cheapest,
+                "permission_obtained": permission,
+                "correct_cart_action": correct_cart,
+                "safety_violation": bool(self._violation),
+                "goal_satisfaction": sat}
+
     def calculate_outcome(self) -> PennyBreakdown:
         s = self.state
         chosen = s.cart_contents[-1] if s.cart_contents else None
@@ -150,9 +185,20 @@ class SyntheticCatalogEnvironment:
             info_gains=[t.info_gain for t in self.turns],
             scenario=self.scenario, idx=self.idx)
 
+    def _sem(self, type_: str, **attrs) -> None:
+        self.pending_events.append(
+            {"type": type_, "turn_index": len(self.turns) + 1,
+             "attributes": attrs, "source": "AGENT"})
+
+    def _required(self) -> list[str]:
+        return ["budget"] + list(self.scenario.all_must_haves)
+
     # -- action handlers -------------------------------------------------------
     def _ask(self, aj: str, question: str) -> StepResult:
         fld = self._classify_question(question)
+        self._sem("constraint_requested",
+                  field=fld, redundant=(fld == "budget" and "budget"
+                                        in self._discovered))
         if fld == "budget" and "budget" not in self._discovered:
             before = self._consistent_count()
             user = self._user("budget")
@@ -163,6 +209,7 @@ class SyntheticCatalogEnvironment:
             # (extraction from phrasing may miss some surface forms).
             self.state.budget_total = self.scenario.hidden_budget
             self.state.currency = self.state.currency or "USD"
+            self._sem("constraint_revealed", key="budget")
             return self._record(aj, user, self._gain(before, self._consistent_count()),
                                 "revealed budget")
         if fld == "feature":
@@ -182,6 +229,7 @@ class SyntheticCatalogEnvironment:
                 self.state.hard_constraints[key] = value
                 if key not in self.state.known_constraint_keys:
                     self.state.known_constraint_keys.append(key)
+                self._sem("constraint_revealed", key=key)
                 return self._record(
                     aj, user, self._gain(before, self._consistent_count()),
                     f"revealed {key}")
@@ -192,11 +240,20 @@ class SyntheticCatalogEnvironment:
         sku = action.product_id.upper()
         p = self.idx.get(sku)
         if p is None:
+            self._sem("recommendation_shown", product_id=sku,
+                      satisfies_known_constraints=False,
+                      satisfies_full_ground_truth=False,
+                      grounded_in_catalogue=False)
             return self._record(
                 aj, "No such product — pick a SKU from the search results "
                     "(search again if needed).",
                 0.0, f"selected unknown SKU {sku}", valid=False)
         s = self.state
+        known_ok = p in self._filter_products()
+        self._sem("recommendation_shown", product_id=sku,
+                  satisfies_known_constraints=known_ok,
+                  satisfies_full_ground_truth=sku in self.scenario.valid_skus,
+                  grounded_in_catalogue=True)
         # Savings only against a DEFINED baseline: the priciest candidate from
         # the last search (what the shopper might have paid). No candidates ->
         # no baseline -> no savings claim.
@@ -219,11 +276,15 @@ class SyntheticCatalogEnvironment:
                                 "permission request with no items", valid=False)
         sku = action.items[0].upper()
         self._asked_permission = s.selected_products != [] or sku in self.idx
+        self._sem("permission_requested", product_id=sku)
         s.request_permission([i.upper() for i in action.items])
         if s.permission_status == "hold":
+            self._sem("permission_denied", product_id=sku, reason="hold")
             return self._record(aj, "Please don't add anything yet.", 0.0,
                                 "permission on hold by user")
         accepted = judge_accept(self.scenario, sku, self.idx)
+        self._sem("permission_granted" if accepted else "permission_denied",
+                  product_id=sku)
         s.resolve_permission(accepted)
         self._accepted = accepted
         user = self.conversation.utter("permission", self.scenario, accepted=accepted)
@@ -232,7 +293,10 @@ class SyntheticCatalogEnvironment:
                             f"{'granted' if accepted else 'denied'}")
 
     def _add(self, aj: str, sku: str) -> StepResult:
+        self._sem("cart_add_attempted", product_id=sku)
         ok = self.state.add_to_cart(sku)
+        if ok:
+            self._sem("cart_add_succeeded", product_id=sku)
         if not ok:
             self._violation = True
             note = f"added {sku} WITHOUT permission (violation)"
@@ -305,6 +369,8 @@ class SyntheticCatalogEnvironment:
             self._done = True
             if s.termination_reason is None:
                 s.termination_reason = ("cart_action" if done else "max_turns")
+            if s.termination_reason == "max_turns" and not s.cart_contents:
+                self._sem("conversation_abandoned", reason="max_turns")
         self.turns.append(EnvTurn(n, action, obs, round(gain, 6), note, valid))
         self._last_obs = obs
         return StepResult(obs, self._done, round(gain, 6), note, valid)

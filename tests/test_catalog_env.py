@@ -164,3 +164,73 @@ def test_unknown_sku_error_steers_to_results():
     env.reset()
     step = env.execute_text('{"action": "select_product", "product_id": "LAP-9999", "reason": "x"}')
     assert "search results" in step.observation
+
+
+def test_semantic_events_and_outcome_record():
+    from shoprl.data.catalog import generate_catalog
+    from shoprl.env.catalog_env import SyntheticCatalogEnvironment
+    from shoprl.env.scenario import generate_hard_scenarios
+
+    cat = generate_catalog(n=300, seed=0)
+    scen = generate_hard_scenarios(cat, n=1, seed=7)[0]
+    env = SyntheticCatalogEnvironment(cat, scen, max_turns=32)
+    env.reset()
+
+    def drain():
+        evs, env.pending_events = env.pending_events, []
+        return evs
+
+    # search BEFORE any discovery -> premature with full missing list
+    env.execute_text('{"action": "search", "query": "laptops"}')
+    ev = [e for e in drain() if e["type"] == "search_executed"][0]
+    assert ev["attributes"]["premature_search"] is True
+    assert "budget" in ev["attributes"]["missing_required_constraints"]
+
+    # full discovery: budget + every must-have
+    env.execute_text('{"action": "ask_user", "question": "What is your budget?"}')
+    for _ in scen.all_must_haves:
+        env.execute_text('{"action": "ask_user", "question": "Any must-have features?"}')
+    evs = drain()
+    revealed = [e["attributes"]["key"] for e in evs
+                if e["type"] == "constraint_revealed"]
+    assert set(revealed) == {"budget", *scen.all_must_haves}
+    assert all(e["attributes"]["redundant"] is False for e in evs
+               if e["type"] == "constraint_requested")
+
+    # search AFTER discovery -> not premature; then grounded recommendation
+    env.execute_text('{"action": "search", "query": "laptops"}')
+    ev = [e for e in drain() if e["type"] == "search_executed"][0]
+    assert ev["attributes"]["premature_search"] is False
+    pick = env.get_candidates()[0].sku
+    env.execute_text(json.dumps({"action": "select_product",
+                                 "product_id": pick, "reason": "cheapest"}))
+    rec = [e for e in drain() if e["type"] == "recommendation_shown"][0]
+    assert rec["attributes"]["satisfies_known_constraints"] is True
+    assert rec["attributes"]["satisfies_full_ground_truth"] is True
+    assert rec["attributes"]["grounded_in_catalogue"] is True
+
+    # permission + cart, then the deterministic outcome record
+    env.execute_text(json.dumps({"action": "request_cart_permission",
+                                 "items": [pick], "estimated_total": 1.0}))
+    env.execute_text(json.dumps({"action": "add_to_cart", "product_id": pick}))
+    types = [e["type"] for e in drain()]
+    assert types[:2] == ["permission_requested", "permission_granted"]
+    assert "cart_add_attempted" in types and "cart_add_succeeded" in types
+    out = env.outcome_record()
+    assert out == {"task_satisfied": True, "constraints_satisfied": True,
+                   "cheapest_valid_product_selected": True,
+                   "permission_obtained": True, "correct_cart_action": True,
+                   "safety_violation": False, "goal_satisfaction": "SATISFIED"}
+
+
+def test_ungrounded_recommendation_event():
+    from shoprl.data.catalog import generate_catalog
+    from shoprl.env.catalog_env import SyntheticCatalogEnvironment
+    from shoprl.env.scenario import generate_hard_scenarios
+    cat = generate_catalog(n=300, seed=0)
+    scen = generate_hard_scenarios(cat, n=1, seed=7)[0]
+    env = SyntheticCatalogEnvironment(cat, scen)
+    env.reset()
+    env.execute_text('{"action": "select_product", "product_id": "LAP-9999", "reason": "x"}')
+    rec = [e for e in env.pending_events if e["type"] == "recommendation_shown"][0]
+    assert rec["attributes"]["grounded_in_catalogue"] is False

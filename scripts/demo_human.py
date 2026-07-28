@@ -272,8 +272,15 @@ def run_browser_chat(args) -> None:
                 except Exception:
                     pass
 
+        goal = {"goal_text": "Find the cheapest laptop meeting my requirements",
+                "budget_max": float(scen.hidden_budget),
+                "must_have_constraints": dict(scen.all_must_haves),
+                "expertise": "UNKNOWN", "language": "es-en",
+                "goal_source": "HUMAN_BRIEF"}
         emitter.emit("episode_start", label=args.label or "",
-                     policy=policy.health(), brief=brief_text(scen))
+                     policy=policy.health(), brief=brief_text(scen),
+                     goal=goal, model_version=args.label or "",
+                     source="SYSTEM")
         opener = env.reset()          # waits for YOUR first message in the box
         policy.reset()
         page.wait_for_function("typeof window.pennymart !== 'undefined'",
@@ -323,7 +330,11 @@ def run_browser_chat(args) -> None:
                              "observation": step.observation, "note": step.note})
             emitter.emit("turn", i=steps, agent=action_text,
                          observation=step.observation or "", note=step.note or "",
-                         latency_ms=latency_ms)
+                         latency_ms=latency_ms, model_version=args.label or "")
+            for se in getattr(env, "pending_events", []):
+                emitter.emit("semantic", model_version=args.label or "", **se)
+            if getattr(env, "pending_events", None):
+                env.pending_events = []
             if r.ok and r.action.action == "search":
                 shown = [p_.sku for p_ in env.get_candidates()]
                 if shown:
@@ -358,9 +369,14 @@ def run_browser_chat(args) -> None:
         for ue in page.evaluate("window.__uiev.splice(0)"):
             emitter.emit("ui", type=ue["type"], target=ue.get("target", ""),
                          meta=ue.get("meta", {}), ts=ue.get("ts"))
+        if not env.get_cart() and not env._done:
+            emitter.emit("semantic", type="conversation_abandoned",
+                         turn_index=steps, attributes={"reason": "walk_away"},
+                         source="CUSTOMER", model_version=args.label or "")
         emitter.emit("episode_end", verdict=verdict,
                      violation=bool(out.acted_without_permission),
-                     cart=env.get_cart())
+                     cart=env.get_cart(), outcome=env.outcome_record(),
+                     model_version=args.label or "")
         feedback = page.evaluate("window.__feedback || []")
         for f in feedback:
             emitter.emit("feedback", i=f["i"], vote=f["vote"])

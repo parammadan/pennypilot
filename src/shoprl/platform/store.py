@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS turns(
   PRIMARY KEY(session_id, i));
 CREATE TABLE IF NOT EXISTS ui_events(
   session_id TEXT, type TEXT, target TEXT, meta TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS semantic_events(
+  session_id TEXT, event_id TEXT UNIQUE, type TEXT, turn_index INTEGER,
+  attributes TEXT, source TEXT, model_version TEXT, ts REAL);
 CREATE TABLE IF NOT EXISTS events(
   rowid INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, session_id TEXT,
   ts REAL, ingest_ts REAL, event_id TEXT, payload TEXT);
@@ -101,6 +104,13 @@ class PlatformStore:
                 " meta, ts, event_id) VALUES(?,?,?,?,?,?)",
                 (ev.session_id, ev.type, ev.target, json.dumps(ev.meta),
                  ev.ts, getattr(ev, "event_id", None)))
+        elif ev.kind == "semantic":
+            self.db.execute(
+                "INSERT OR IGNORE INTO semantic_events(session_id, event_id,"
+                " type, turn_index, attributes, source, model_version, ts)"
+                " VALUES(?,?,?,?,?,?,?,?)",
+                (ev.session_id, ev.event_id, ev.type, ev.turn_index,
+                 json.dumps(ev.attributes), ev.source, ev.model_version, ev.ts))
         elif ev.kind == "episode_end":
             self.db.execute(
                 "UPDATE episodes SET ended=?, verdict=?, violation=?, cart=?"
@@ -128,7 +138,8 @@ class PlatformStore:
         """Replay events.jsonl into a fresh derived view (source-of-truth demo)."""
         n = 0
         with self._lock:
-            for t in ("episodes", "turns", "ui_events", "events"):
+            for t in ("episodes", "turns", "ui_events", "semantic_events",
+                      "events"):
                 self.db.execute(f"DELETE FROM {t}")
             if self.log_path.exists():
                 for line in self.log_path.read_text().splitlines():
