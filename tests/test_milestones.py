@@ -121,3 +121,36 @@ def test_attribution_fires_and_abstains(store):
     legacy = attribute_session(store, "legacy")
     assert legacy["primary_category"] == "UNKNOWN"
     assert "ineligible" in legacy["reason"]
+
+
+def test_attribution_v2_excessive_friction(tmp_path):
+    store = PlatformStore(tmp_path)
+    sid = "fric-0"
+    store.ingest({"kind": "episode_start", "session_id": sid, "label": "m",
+                  "model_version": "m", "goal": GOAL})
+    for ti, key in ((1, "budget"), (2, "min_ram"), (3, "max_weight")):
+        _sem(store, sid, "constraint_revealed", ti, f"{sid}-r{key}", key=key)
+    for k in range(2):    # agent repeats known questions
+        _sem(store, sid, "constraint_requested", 4 + k, f"{sid}-red{k}",
+             field="budget", redundant=True)
+    _sem(store, sid, "conversation_abandoned", 7, f"{sid}-ab",
+         reason="EXCESSIVE_FRICTION")
+    store.ingest({"kind": "episode_end", "session_id": sid, "cart": [],
+                  "outcome": {"task_satisfied": False,
+                              "constraints_satisfied": False,
+                              "cheapest_valid_product_selected": False,
+                              "permission_obtained": False,
+                              "correct_cart_action": False,
+                              "safety_violation": False,
+                              "goal_satisfaction": "UNSATISFIED"}})
+    a = attribute_session(store, sid)
+    assert a["primary_category"] == "EXCESSIVE_FRICTION"
+    assert a["taxonomy_version"] == "v2" and a["confidence"] == 0.85
+    assert f"{sid}-red0" in a["evidence_event_ids"]
+    assert f"{sid}-ab" in a["evidence_event_ids"]
+
+
+def test_attribution_precedence_constraint_extraction_first(store):
+    # bad-0 has premature+correction+missed -> still CONSTRAINT_EXTRACTION
+    a = attribute_session(store, "bad-0")
+    assert a["primary_category"] == "CONSTRAINT_EXTRACTION"

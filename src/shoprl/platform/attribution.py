@@ -13,7 +13,7 @@ import json
 from shoprl.platform.milestones import _sessions
 from shoprl.platform.store import PlatformStore
 
-TAXONOMY_VERSION = "v1"
+TAXONOMY_VERSION = "v2"
 
 
 def attribute_session(store: PlatformStore, session_id: str) -> dict:
@@ -38,12 +38,57 @@ def attribute_session(store: PlatformStore, session_id: str) -> dict:
                              "constraints_never_revealed": missed,
                              "constraint_violating_recommendations":
                                  len(bad_rec)}}
+    # v2 (added AFTER run 1 measured v1's abstention pattern, BEFORE the
+    # confirmation run's evaluation — see docs pre-registration): the
+    # customer walked away under accumulated friction although every
+    # constraint was eventually disclosed.
+    redundant = s["event_ids"]["redundant"]
+    abandoned = s["event_ids"]["abandoned"]
+    if abandoned and (len(redundant) >= 2 or corrections)             and not (missed or bad_rec):
+        return {**base, "primary_category": "EXCESSIVE_FRICTION",
+                "confidence": 0.85,
+                "evidence_event_ids": redundant + corrections + abandoned,
+                "evidence": {"redundant_questions": len(redundant),
+                             "customer_corrections": len(corrections),
+                             "premature_searches": len(premature),
+                             "abandoned": True}}
     return {**base, "primary_category": "UNKNOWN", "confidence": 0.0,
             "evidence_event_ids": [],
             "reason": "insufficient deterministic evidence "
                       f"(premature={bool(premature)}, "
                       f"correction={bool(corrections)}, "
                       f"missed_or_bad_rec={bool(missed or bad_rec)})"}
+
+
+def validate_against_simulator(store: PlatformStore,
+                               simlog_paths: list[str]) -> dict:
+    """Agreement between platform attributions and the simulator's hidden
+    abandonment reasons — the analytics-vs-truth validation loop."""
+    import json as _json
+    sim_reason = {}
+    for path in simlog_paths:
+        for line in open(path):
+            rec = _json.loads(line)
+            reasons = [l["reason"] for l in rec["log"]
+                       if l["customer_action"] == "ABANDON"]
+            if reasons:
+                sim_reason[rec["session_id"]] = reasons[0]
+    agree = total = 0
+    detail = []
+    for a in attribute_all(store, only_failed=True):
+        truth = sim_reason.get(a["session_id"])
+        if truth is None:
+            continue
+        total += 1
+        ok = (truth == "EXCESSIVE_FRICTION"
+              and a["primary_category"] in ("EXCESSIVE_FRICTION",
+                                            "CONSTRAINT_EXTRACTION"))
+        agree += ok
+        detail.append({"session_id": a["session_id"],
+                       "platform": a["primary_category"],
+                       "simulator": truth, "agree": ok})
+    return {"agreement": round(agree / total, 3) if total else None,
+            "n_abandoned": total, "detail": detail}
 
 
 def attribute_all(store: PlatformStore,

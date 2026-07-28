@@ -39,7 +39,8 @@ def _sessions(store: PlatformStore) -> list[dict]:
                     "corrections": [], "abandoned": False,
                     "outcome": json.loads(outcome) if outcome else None,
                     "event_ids": {"premature": [], "correction": [],
-                                  "bad_rec": []},
+                                  "bad_rec": [], "redundant": [],
+                                  "abandoned": []},
                     "max_ts": 0.0}
     for sid, eid, typ, ti, attrs, ts in db.execute(
             "SELECT session_id, event_id, type, turn_index, attributes, ts"
@@ -49,7 +50,10 @@ def _sessions(store: PlatformStore) -> list[dict]:
             continue
         a = json.loads(attrs or "{}")
         s["max_ts"] = max(s["max_ts"], ts or 0)
-        if typ == "constraint_revealed":
+        if typ == "constraint_requested":
+            if a.get("redundant"):
+                s["event_ids"]["redundant"].append(eid)
+        elif typ == "constraint_revealed":
             s["revealed"].add(a["key"])
             s["revealed_at"].setdefault(a["key"], ti)
         elif typ == "search_executed":
@@ -70,6 +74,7 @@ def _sessions(store: PlatformStore) -> list[dict]:
             s["event_ids"]["correction"].append(eid)
         elif typ == "conversation_abandoned":
             s["abandoned"] = True
+            s["event_ids"]["abandoned"].append(eid)
     for s in out.values():
         s["goal_understood"] = s["required"] <= s["revealed"]
         s["goal_understood_turn"] = (
