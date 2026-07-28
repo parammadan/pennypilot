@@ -16,6 +16,8 @@ import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from shoprl.platform.behavior import (data_quality, funnel_by, metrics,
+                                       session_features, slice_report)
 from shoprl.platform.console import CONSOLE_HTML
 from shoprl.platform.export import build_dataset
 from shoprl.platform.quality import stats
@@ -65,6 +67,43 @@ def make_handler(store: PlatformStore):
                     self._json(stats(store))
                 elif u.path == "/query":
                     self._json(store.query(q.get("sql", "")))
+                elif u.path == "/behavior":
+                    sess = session_features(store)
+                    self._json({"data_quality": data_quality(store),
+                                "metrics": metrics(sess)})
+                elif u.path == "/slices":
+                    sess = session_features(store)
+                    self._json(slice_report(
+                        sess, metric=q.get("metric", "abandoned"),
+                        min_support=int(q.get("min_support", 30)),
+                        top=int(q.get("top", 10))))
+                elif u.path == "/funnel":
+                    self._json(funnel_by(None, store,
+                                         label=q.get("label") or None))
+                elif u.path == "/sessions":
+                    # failure-analysis API (Lesson 7): hand the underlying
+                    # sessions matching a behavioral condition to a human
+                    sess = session_features(store)
+                    for k in ("label", "turn_bucket"):
+                        if q.get(k):
+                            sess = [x for x in sess if str(x[k]) == q[k]]
+                    for k in ("abandoned", "violation", "reformulated",
+                              "repeated", "carted"):
+                        if q.get(k):
+                            want = q[k] in ("1", "true")
+                            sess = [x for x in sess if x[k] == want]
+                    sids = [x["session_id"] for x in sess[:int(q.get("limit", 20))]]
+                    detail = []
+                    for sid in sids:
+                        turns = store.db.execute(
+                            "SELECT i, agent, observation, note, feedback"
+                            " FROM turns WHERE session_id=? ORDER BY i",
+                            (sid,)).fetchall()
+                        detail.append({"session_id": sid, "turns": [
+                            {"i": t[0], "agent": t[1], "observation": t[2],
+                             "note": t[3], "feedback": t[4]} for t in turns]})
+                    self._json({"matched": len(sess), "returned": len(detail),
+                                "sessions": detail})
                 elif u.path == "/export":
                     self._json(build_dataset(
                         store, label=q.get("label") or None,

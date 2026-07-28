@@ -169,3 +169,57 @@ def test_s3_archiver_batching_and_layout():
     total = sum(len([l for l in body.decode().splitlines() if l])
                 for _, _, body in s3.puts)
     assert total == 7 and j.loads(s3.puts[0][2].decode().splitlines()[0])["i"] == 0
+
+
+def test_behavioral_metrics_have_denominators(tmp_path):
+    import subprocess, sys
+    subprocess.run([sys.executable, "scripts/synth_traffic.py", "--n", "200",
+                    "--root", str(tmp_path)], check=True, capture_output=True)
+    from shoprl.platform.behavior import (data_quality, metrics,
+                                          session_features, slice_report)
+    store = PlatformStore(tmp_path)
+    sess = session_features(store)
+    m = metrics(sess)
+    assert m["sessions"] == 200
+    for name in ("abandonment", "cart_rate_after_search", "reformulation",
+                 "invalid_action", "violation"):
+        assert "numerator" in m[name] and "denominator" in m[name], name
+    assert m["violation"]["value"] == 0.0
+    # eligible-population discipline: cart rate uses searched sessions only
+    assert "search" in m["cart_rate_after_search"]["denominator"]
+
+    rep = slice_report(sess, metric="abandoned", min_support=30)
+    assert rep["top_slices"], "personas must produce ranked slices"
+    top = rep["top_slices"][0]
+    assert top["support"] >= 30 and "deviation" in top
+    # browser persona never carts -> must surface among top abandonment slices
+    assert any("browser" in str(c["slice"].get("label", ""))
+               for c in rep["top_slices"])
+
+    dq = data_quality(store)
+    assert dq["verdict"] == "clean", dq
+
+
+def test_failure_analysis_api(tmp_path):
+    import subprocess, sys, urllib.request
+    from http.server import HTTPServer
+
+    from shoprl.platform.ingest import make_handler
+    subprocess.run([sys.executable, "scripts/synth_traffic.py", "--n", "60",
+                    "--root", str(tmp_path)], check=True, capture_output=True)
+    store = PlatformStore(tmp_path)
+    httpd = HTTPServer(("127.0.0.1", 0), make_handler(store))
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{port}"
+        b = json.loads(urllib.request.urlopen(f"{base}/behavior").read())
+        assert b["data_quality"]["verdict"] == "clean"
+        s = json.loads(urllib.request.urlopen(
+            f"{base}/sessions?abandoned=1&limit=3").read())
+        assert s["matched"] > 0 and s["sessions"][0]["turns"]
+        f = json.loads(urllib.request.urlopen(f"{base}/funnel").read())
+        assert f["stages"][0]["stage"] == "engaged"
+        assert f["stages"][1]["conversion_from_prev"] is not None
+    finally:
+        httpd.shutdown()
