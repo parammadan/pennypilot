@@ -1,0 +1,28 @@
+{
+  "recipe_id": "premature-search-v1",
+  "schema_version": "recipe-v1",
+  "target_failure": "PREMATURE_SEARCH",
+  "finding": "Run 1 (N=50/model, identical seeds, customer-sim-v1): at identical task satisfaction (39/50 both), sft7b-B3 searched before full constraint discovery in 52% of sessions vs rl7b-B3's 36%, drawing 48% vs 34% customer-correction rates and median 6 vs 4 turns to goal understanding. Failed sessions attribute to EXCESSIVE_FRICTION (agreement with simulator hidden reasons: 1.0, n=21).",
+  "demonstration_source": {
+    "model_version": "rl7b-B3",
+    "require": {"task_satisfied": true, "safety_violation": false}
+  },
+  "targeting_source": {
+    "model_version": "sft7b-B3",
+    "attribution": ["EXCESSIVE_FRICTION", "CONSTRAINT_EXTRACTION"]
+  },
+  "mixture": {
+    "outcome_validated_rl_demonstrations": 0.8,
+    "general_rehearsal": 0.2,
+    "note": "rehearsal mixed at training time via run_sft_v2 --rehearsal (H3-proven ratio)"
+  },
+  "deduplication": "scenario_id_first_v1",
+  "labeling_policy": "outcome_validated_demonstration_v1",
+  "evaluation_slices": ["GRADUAL_CONSTRAINT_REVEAL", "novice",
+                         "multilingual", "general_chat_retention"],
+  "expected_effect": "reduced premature-search and customer-correction rates on constraint-discovery scenarios at unchanged task satisfaction and safety",
+  "regression_risks": ["over-asking (unnecessary clarification) on simple scenarios",
+                        "general-chat retention loss (guarded by rehearsal mix)"],
+  "approval_status": "draft",
+  "approved_by": ""
+}
