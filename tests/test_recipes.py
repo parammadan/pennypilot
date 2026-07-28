@@ -33,7 +33,7 @@ def _ep(store, sid, mv, satisfied, scenario_idx):
 def store(tmp_path):
     st = PlatformStore(tmp_path / "s")
     _ep(st, "camp-rl-100-0", "rl7b-B3", True, 0)
-    _ep(st, "camp-rl-100-0b", "rl7b-B3", True, 0)   # same scenario idx 0 -> dedup
+    _ep(st, "camp2-rl-100-0", "rl7b-B3", True, 0)   # same scenario idx 0 -> dedup
     _ep(st, "camp-rl-100-1", "rl7b-B3", False, 1)   # failed -> excluded
     _ep(st, "camp-sft-100-2", "sft7b-B3", False, 2) # targeting only
     return st
