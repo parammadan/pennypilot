@@ -44,6 +44,8 @@ def main() -> None:
                     help="JSONL of {q,a} general-chat exemplars to MIX IN "
                          "(H3 Arm B rehearsal); omit for the specialist arm")
     ap.add_argument("--demos", type=int, default=1000)
+    ap.add_argument("--cannot-frac", type=float, default=None,
+                    help="override cannot_fulfill share in --mix-generated")
     ap.add_argument("--mix-generated", type=int, default=0,
                     help="with --dataset-file: also mix N generated demos "
                          "(family/kind diversity guards the action grammar)")
@@ -83,8 +85,10 @@ def main() -> None:
         print(f"[sft-v2] recipe dataset: {len(demos)} sequences "
               f"from {args.dataset_file}")
         if args.mix_generated:
+            kw = ({"cannot_frac": args.cannot_frac}
+                  if args.cannot_frac is not None else {})
             gen = generate_sft_v2_dialogues(catalog, n=args.mix_generated,
-                                            seed=args.seed)
+                                            seed=args.seed, **kw)
             demos = demos + gen
             print(f"[sft-v2] +{len(gen)} generated demos mixed "
                   f"(action-grammar diversity)")
