@@ -38,3 +38,40 @@ and/or add the RL stage that gave B3 its notice-generalization.
   regressed ships. The loop is: behavior → evidence → attribution → recipe →
   training → guardrailed evaluation → decision — and every arrow has an
   artifact.
+
+---
+# v3 verdict (2026-07-29) — ACCEPTED
+
+| check | bar | v3 measured | verdict |
+|---|---|---|---|
+| cannot-redirect | ≥ 10/12 | **12/12** (raw 4/6, best ever) | MET |
+| PRIMARY premature-search | < 40% | **32.0%** (B3 replay: 55.3%) | MET |
+| replay task satisfaction | within 6 pts of B3 | 126/150 vs 114/150 (+8) | MET |
+| violations | 0 | 0/300 | MET |
+| retention | ≥ 90% | **100%** | MET |
+
+First candidate to pass the complete acceptance rule. The cannot-density
+lever fixed the v2 regression outright (5/12 → 12/12) at a measured cost:
+part of the friction gain (premature 24%→32%, corrections 23%→31% vs C2) —
+still decisively better than baseline, and the trade-off is now a documented,
+tunable dial.
+
+## The capstone finding: the evaluation surfaces disagree
+- Offline registered protocol (n=128, scripted reveals): **B3 0.906 > C3 0.52**
+- Behavioral replay (adaptive customer): **C3 126/150 > B3 114/150**, with
+  32% vs 55% premature search
+
+Two evaluation surfaces RANK THE MODELS OPPOSITELY. The offline protocol's
+scripted shopper always answers questions compliantly — it rewards B3's
+RL-tuned flow and never punishes premature search; the adaptive customer
+does. Neither number is "wrong"; they measure different customers. This is
+the platform's thesis in one line: WHICH MODEL IS BETTER DEPENDS ON HOW YOUR
+EVALUATION'S CUSTOMER BEHAVES — so evaluate with customers that behave.
+
+## Shipping recommendation
+C3 is the accepted recipe outcome and the better model under behavioral
+evaluation; B3 remains stronger on the RL-tuned offline protocol. The
+registered synthesis path (not yet run): RLOO stage on top of C3 — expected
+to recover offline strength while keeping the discipline SFT instilled.
+Loop chapter total: 3 iterations, ~8 GPU-h, two guardrail catches, one
+accepted candidate, one surface-disagreement finding.
