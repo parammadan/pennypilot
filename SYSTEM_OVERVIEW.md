@@ -219,3 +219,84 @@ merged-weights vLLM 2.3×, streaming).
 - `benchmarks/artifacts/` — SS0–SS13 measurements + manifests.
 - `demos/live_sessions/` (gitignored) — self-captured human episodes.
 - Docs repo notes/CHALLENGES.md — 33 root-caused failures worth reading.
+
+---
+
+# UPDATE — 2026-07-29: the behavioral-intelligence chapter
+
+Everything above still stands; this chapter (2026-07-28/29) turned the
+platform from "tracks interactions" into "runs the continuous-improvement
+loop." Audit first (`AUDIT_BEHAVIORAL_2026-07-28.md` — key admission: the
+old synthetic traffic scripted BOTH sides, so its findings were tautologies).
+
+## New semantic core (the approved vertical slice)
+- Every event carries an Envelope (event_id / source / model_version /
+  ingest_ts); the store is idempotent under Kafka redelivery (a real bug
+  found in the audit and fixed).
+- `CustomerGoal` (source-typed: SIMULATED_GROUND_TRUTH | HUMAN_BRIEF |
+  INFERRED | AMBIGUOUS) on every episode — hidden from the agent, used only
+  for evaluation/analytics. Deterministic `Outcome` computed from scenario
+  truth + cart + the permission gate, never from clicks.
+- The ENVIRONMENT emits 11 authoritative semantic events (constraint
+  requested/revealed, search w/ premature flag + missing constraints,
+  recommendation groundedness triad, permission flow, cart, abandonment) —
+  no regex-on-text where truth exists.
+- Conversation-aware milestone funnel (8 stages, failure reason codes),
+  three friction metrics with full provenance, deterministic failure
+  attribution (CONSTRAINT_EXTRACTION, EXCESSIVE_FRICTION) with evidence
+  event IDs and abstention. Attribution agreed with the simulator's hidden
+  reasons 100% (n=74 across runs).
+- `AdaptiveCustomer` (customer-sim-v1): reacts to the real model — reveals
+  constraints when asked well, corrects violations citing trigger events,
+  abandons under friction — seeded, versioned, reasons logged.
+
+## Measured findings (real checkpoints, adaptive customers)
+1. **Outcome eval can't tell sft7b-B3 and rl7b-B3 apart (identical task
+   satisfaction, twice: 39/50 and 123/150). Friction can:** premature-search
+   51% vs 29%, corrections 47% vs 28% (N=150, 4–5 SE, direction holds across
+   three patience profiles).
+2. **A proxy inverted in our own data:** turns-to-goal looked BETTER for the
+   worse model because customer corrections did the discovery labor (70 vs
+   42 correction-driven reveals). Metric retired as defined.
+3. **Patience masks friction:** the SFT model satisfies 49/50 patient
+   customers but 33/50 impatient ones — outcome metrics inherit customer
+   tolerance; friction metrics don't.
+
+## The closed loop (recipes → training → guardrailed decisions)
+Versioned, human-approved data recipes (drafts refuse to generate; failures
+target, never label; datasets hashed with lineage rows). Three iterations:
+- **v1: catastrophic failure** — constant opener placeholder made 162
+  sequences a homogeneous population; the model lost the action grammar
+  entirely. Passed every row-level check, failed as a population. Guardrails
+  caught it pre-ship; pre-registered rollback executed.
+- **v2: primary smashed** (premature 24% vs 55%, corrections 23% vs 54%,
+  satisfaction +9pts) but an UNTARGETED skill regressed (cannot-redirect
+  5/12 vs bar 10/12) → NOT SHIPPED per the registered acceptance rule.
+- **v3: ACCEPTED** — cannot-density lever (12% → 30% of the generated mix)
+  fixed the regression outright (redirect 12/12) at a documented cost to the
+  friction gain (premature 24%→32%): a tunable recipe dial. All guardrails
+  passed.
+
+## Capstone finding
+The offline registered protocol and the behavioral replay **rank the models
+oppositely** (offline: B3 0.906 > C3 0.52; behavioral: C3 126/150 > B3
+114/150 with half the premature searching) — because the offline scripted
+shopper never punishes premature search and the adaptive customer does.
+Evaluation verdicts are a function of the evaluator's customer model.
+A pre-registered synthesis run (RLOO on C3) tests whether training order
+resolves the disagreement.
+
+## Presentation layer
+React + Vite + TS dashboard (`dashboard/`, served by the platform; legacy
+console at `/legacy`): Executive, Journey (milestone funnel + reason codes),
+Friction (provenance on every metric), Investigation (slices + attribution +
+transcript drill-down), Recipes & Lineage (proposals w/ approval status +
+finding→dataset→training→eval trail), SQL. `INTERVIEW_NARRATIVE.md` = the
+five-minute story, every number measured, failures included.
+
+## Updated honest limitations
+One scenario family; results conditional on customer-sim-v1's versioned
+reaction rules; SE arithmetic not formal inference; correction phrasings are
+templates; the mechanism of why RL reduces premature search remains
+untested. Loop chapter cost: ~13 GPU-h across 4 training runs, 1200+
+real-model behavioral episodes.
