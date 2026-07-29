@@ -61,7 +61,21 @@ def make_handler(store: PlatformStore):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             try:
-                if u.path == "/":
+                if u.path in ("/", "/index.html") or u.path.startswith("/assets/"):
+                    import os
+                    dist = os.path.join(os.path.dirname(__file__),
+                                        "..", "..", "..", "dashboard", "dist")
+                    rel = "index.html" if u.path in ("/", "/index.html")                         else u.path.lstrip("/")
+                    fp = os.path.normpath(os.path.join(dist, rel))
+                    if os.path.normpath(dist) in fp and os.path.isfile(fp):
+                        ctype = ("text/html" if fp.endswith(".html") else
+                                 "text/javascript" if fp.endswith(".js") else
+                                 "text/css" if fp.endswith(".css") else
+                                 "application/octet-stream")
+                        self._send(200, open(fp, "rb").read(), ctype)
+                    else:
+                        self._send(200, CONSOLE_HTML.encode(), "text/html")
+                elif u.path == "/legacy":
                     self._send(200, CONSOLE_HTML.encode(), "text/html")
                 elif u.path == "/health":
                     self._json({"ok": True, "root": str(store.root)})
@@ -92,6 +106,25 @@ def make_handler(store: PlatformStore):
                     sid = q.get("session_id")
                     self._json(attribute_session(store, sid) if sid
                                else attribute_all(store))
+                elif u.path == "/lineage":
+                    try:
+                        rows = store.db.execute(
+                            "SELECT recipe_id, dataset_sha, created, manifest"
+                            " FROM lineage ORDER BY created DESC").fetchall()
+                    except Exception:
+                        rows = []
+                    self._json([{"recipe_id": r[0], "dataset_sha": r[1],
+                                 "created": r[2],
+                                 "manifest": json.loads(r[3])} for r in rows])
+                elif u.path == "/recipes":
+                    import glob as _g
+                    out = []
+                    for f in sorted(_g.glob("recipes/*.json")):
+                        try:
+                            out.append(json.loads(open(f).read()))
+                        except Exception:
+                            pass
+                    self._json(out)
                 elif u.path == "/alerts":
                     self._json(alerts(store))
                 elif u.path == "/timeseries":
