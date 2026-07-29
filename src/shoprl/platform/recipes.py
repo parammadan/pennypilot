@@ -95,10 +95,27 @@ def apply_recipe(store: PlatformStore, recipe: Recipe,
         turns = store.db.execute(
             "SELECT agent, observation FROM turns WHERE session_id=?"
             " ORDER BY i", (s["session_id"],)).fetchall()
+        opener = store.db.execute(
+            "SELECT brief FROM episodes WHERE session_id=?",
+            (s["session_id"],)).fetchone()[0]
+        if not opener:
+            # campaigns before 2026-07-29 didn't record the opener; for
+            # customer-sim-v1 it is a deterministic constant per language,
+            # so this reconstruction is exact, not an approximation
+            from shoprl.env.customer_sim import _OPENERS
+            lang = (json.loads(store.db.execute(
+                "SELECT goal FROM episodes WHERE session_id=?",
+                (s["session_id"],)).fetchone()[0] or "{}")
+                .get("language")) or "en"
+            opener = _OPENERS.get(lang, _OPENERS["en"])
         msgs = [{"role": "system", "content": SYSTEM_PROMPT_CHAT_MIN}]
         for j, (agent, obs) in enumerate(turns):
             if j == 0:
-                msgs.append({"role": "user", "content": "(shopper opens)"})
+                # the REAL opener (v1 used a constant placeholder — every
+                # sequence started identically and the tiny dataset overfit
+                # to it; see docs 2026-07-29 rollback verdict)
+                msgs.append({"role": "user",
+                             "content": opener or "(shopper opens)"})
             msgs.append({"role": "assistant", "content": agent})
             if obs:
                 msgs.append({"role": "user", "content": obs})

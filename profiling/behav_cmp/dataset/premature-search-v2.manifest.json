@@ -1,0 +1,28 @@
+{
+ "recipe_id": "premature-search-v2",
+ "schema_version": "recipe-v1",
+ "created": "2026-07-29 12:00 UTC",
+ "dataset_sha256_16": "87552315213abbba",
+ "sequences": 162,
+ "demonstration_candidates": 162,
+ "dropped_duplicates": 0,
+ "dropped_outcome_invalid": 0,
+ "targeting_sessions_informing_slices": 200,
+ "mixture_documented": {
+  "outcome_validated_rl_demonstrations": 0.3,
+  "generated_demos_all_kinds": 0.5,
+  "general_rehearsal": 0.2,
+  "note": "generated demos restore action-grammar + flow diversity; rehearsal at train time"
+ },
+ "labeling_policy": "outcome_validated_demonstration_v1",
+ "evaluation_slices": [
+  "GRADUAL_CONSTRAINT_REVEAL",
+  "novice",
+  "multilingual",
+  "general_chat_retention"
+ ],
+ "quality_checks": {
+  "violations_in_dataset": 0,
+  "all_outcome_validated": true
+ }
+}

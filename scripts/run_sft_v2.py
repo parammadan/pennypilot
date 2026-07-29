@@ -44,6 +44,9 @@ def main() -> None:
                     help="JSONL of {q,a} general-chat exemplars to MIX IN "
                          "(H3 Arm B rehearsal); omit for the specialist arm")
     ap.add_argument("--demos", type=int, default=1000)
+    ap.add_argument("--mix-generated", type=int, default=0,
+                    help="with --dataset-file: also mix N generated demos "
+                         "(family/kind diversity guards the action grammar)")
     ap.add_argument("--dataset-file", default=None,
                     help="train on a recipe-exported dataset (messages JSONL)"
                          " INSTEAD of generated demos; --rehearsal still mixes")
@@ -79,6 +82,12 @@ def main() -> None:
         demos = demos_from_messages_jsonl(args.dataset_file)
         print(f"[sft-v2] recipe dataset: {len(demos)} sequences "
               f"from {args.dataset_file}")
+        if args.mix_generated:
+            gen = generate_sft_v2_dialogues(catalog, n=args.mix_generated,
+                                            seed=args.seed)
+            demos = demos + gen
+            print(f"[sft-v2] +{len(gen)} generated demos mixed "
+                  f"(action-grammar diversity)")
     else:
         demos = generate_sft_v2_dialogues(catalog, n=args.demos, seed=args.seed)
         print(f"[sft-v2] shopping demos: {json.dumps(demo_v2_stats(demos))}")

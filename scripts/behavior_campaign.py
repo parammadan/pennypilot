@@ -102,7 +102,7 @@ def run_campaign(policy, label: str, n: int, seed: int, out_path: str,
 
         emit("episode_start", label=label,
              scenario_family=family_tag or FAMILY,
-             source="SYSTEM", policy={"ckpt": label},
+             source="SYSTEM", policy={"ckpt": label}, brief=obs,
              goal={"goal_text": "cheapest laptop meeting my requirements",
                    "budget_max": float(scen.hidden_budget),
                    "must_have_constraints": dict(scen.all_must_haves),
