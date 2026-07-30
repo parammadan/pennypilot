@@ -25,10 +25,12 @@ from shoprl.platform.behavior import (alerts, data_quality,
 from shoprl.platform.console import CONSOLE_HTML
 from shoprl.platform.export import build_dataset
 from shoprl.platform.quality import stats
+from shoprl.platform.jobs import JobService
 from shoprl.platform.store import PlatformStore
 
 
-def make_handler(store: PlatformStore):
+def make_handler(store: PlatformStore, jobsvc: JobService | None = None):
+    jobsvc = jobsvc or JobService(store)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):  # quiet
             pass
@@ -44,16 +46,48 @@ def make_handler(store: PlatformStore):
         def _json(self, obj, code: int = 200) -> None:
             self._send(code, json.dumps(obj).encode(), "application/json")
 
+        def _auth(self):
+            tok = (self.headers.get("Authorization") or "").replace(
+                "Bearer ", "")
+            return jobsvc.whoami(tok)
+
         def do_POST(self):
             u = urlparse(self.path)
-            if u.path != "/events":
-                return self._json({"error": "unknown endpoint"}, 404)
             try:
-                raw = json.loads(self.rfile.read(
-                    int(self.headers.get("Content-Length", 0))))
-                events = raw if isinstance(raw, list) else [raw]
-                kinds = [store.ingest(e) for e in events]
-                self._json({"ok": True, "ingested": len(kinds)})
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0)) or 2) or "{}")
+            except Exception:
+                body = {}
+            try:
+                if u.path == "/events":
+                    events = body if isinstance(body, list) else [body]
+                    kinds = [store.ingest(e) for e in events]
+                    return self._json({"ok": True, "ingested": len(kinds)})
+                if u.path == "/login":
+                    r = jobsvc.login(body.get("user", ""),
+                                     body.get("password", ""))
+                    return self._json(r or {"error": "bad credentials"},
+                                      200 if r else 401)
+                # everything below requires a logged-in user
+                me = self._auth()
+                if not me:
+                    return self._json({"error": "login required"}, 401)
+                if u.path == "/extract":
+                    return self._json(jobsvc.request_extraction(
+                        me["user"], recipe_id=body.get("recipe_id"),
+                        source=body.get("source", "hot")))
+                if u.path == "/train":
+                    return self._json(jobsvc.request_training(
+                        me["user"], dataset=body["dataset"],
+                        out_name=body["out_name"],
+                        mix_generated=int(body.get("mix_generated", 270)),
+                        cannot_frac=float(body.get("cannot_frac", 0.30))))
+                if u.path == "/recipes/approve":
+                    if me["role"] != "admin":
+                        return self._json({"error": "admin only"}, 403)
+                    return self._json(jobsvc.approve_recipe(
+                        me["user"], body["recipe_id"]))
+                return self._json({"error": "unknown endpoint"}, 404)
             except Exception as e:
                 self._json({"error": str(e)}, 400)
 
@@ -84,7 +118,33 @@ def make_handler(store: PlatformStore):
                 elif u.path == "/stats":
                     self._json(stats(store))
                 elif u.path == "/query":
+                    # governance: raw SQL is ADMIN-ONLY; everyone else uses
+                    # form-driven extraction requests
+                    me = self._auth()
+                    if not me or me["role"] != "admin":
+                        return self._json(
+                            {"error": "raw SQL is admin-only — use "
+                                      "extraction requests"}, 403)
                     self._json(store.query(q.get("sql", "")))
+                elif u.path == "/me":
+                    self._json(self._auth() or {})
+                elif u.path == "/jobs":
+                    self._json(jobsvc.jobs())
+                elif u.path == "/privacy":
+                    rows = store.db.execute(
+                        "SELECT pii_type, SUM(n) FROM privacy_log GROUP BY 1"
+                    ).fetchall()
+                    self._json({"redactions_by_type": dict(rows),
+                                "total": sum(r[1] for r in rows),
+                                "note": "synthetic data should redact ZERO — "
+                                        "nonzero is a data-quality alarm"})
+                elif u.path == "/logs":
+                    logins = store.db.execute(
+                        "SELECT user, role, created FROM tokens"
+                        " ORDER BY created DESC LIMIT 50").fetchall()
+                    self._json({"jobs": jobsvc.jobs()[:50],
+                                "logins": [{"user": l[0], "role": l[1],
+                                            "ts": l[2]} for l in logins]})
                 elif u.path == "/behavior":
                     sess = session_features(store)
                     self._json({"data_quality": data_quality(store),

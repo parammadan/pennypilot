@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { usePoll } from "./api";
-import { Executive, Friction, Investigation, Journey, Recipes, Sql } from "./views";
+import { Executive, Friction, Investigation, Journey, Platform, Recipes,
+         Sql } from "./views";
 
 const TABS = {
   Executive, Journey, Friction, Investigation,
-  "Recipes & Lineage": Recipes, SQL: Sql,
+  "Recipes & Lineage": Recipes, Platform, "SQL (admin)": Sql,
 } as const;
 
 export default function App() {

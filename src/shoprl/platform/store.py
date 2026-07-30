@@ -13,6 +13,7 @@ from pathlib import Path
 
 from shoprl.actions import parse_agent_action
 from shoprl.platform.events import parse_event
+from shoprl.platform.privacy import scrub
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS episodes(
@@ -24,6 +25,8 @@ CREATE TABLE IF NOT EXISTS turns(
   PRIMARY KEY(session_id, i));
 CREATE TABLE IF NOT EXISTS ui_events(
   session_id TEXT, type TEXT, target TEXT, meta TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS privacy_log(
+  ts REAL, session_id TEXT, field TEXT, pii_type TEXT, n INTEGER);
 CREATE TABLE IF NOT EXISTS semantic_events(
   session_id TEXT, event_id TEXT UNIQUE, type TEXT, turn_index INTEGER,
   attributes TEXT, source TEXT, model_version TEXT, ts REAL);
@@ -66,6 +69,18 @@ class PlatformStore:
         redelivery and log re-ingestion)."""
         import time as _t
         ev = parse_event(raw)
+        # privacy stage: customer-side text is scrubbed BEFORE storage —
+        # synthetic data should yield zero redactions; nonzero = alarm
+        for field in ("observation",):
+            val = getattr(ev, field, None)
+            if val:
+                clean, counts = scrub(val)
+                if counts:
+                    setattr(ev, field, clean)
+                    for t, n in counts.items():
+                        self.db.execute(
+                            "INSERT INTO privacy_log VALUES(?,?,?,?,?)",
+                            (ev.ts, ev.session_id, field, t, n))
         with self._lock:
             eid = getattr(ev, "event_id", None)
             if eid and self.db.execute(
@@ -150,7 +165,7 @@ class PlatformStore:
         n = 0
         with self._lock:
             for t in ("episodes", "turns", "ui_events", "semantic_events",
-                      "events"):
+                      "privacy_log", "events"):
                 self.db.execute(f"DELETE FROM {t}")
             if self.log_path.exists():
                 for line in self.log_path.read_text().splitlines():

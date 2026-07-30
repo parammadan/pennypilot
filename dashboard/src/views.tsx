@@ -204,8 +204,14 @@ export function Sql() {
     "SELECT model_version, COUNT(*) episodes, SUM(violation) violations FROM episodes GROUP BY 1");
   const [out, setOut] = useState<any>(null);
   const run = async () => {
-    try { setOut(await get(`/query?sql=${encodeURIComponent(q)}`)); }
-    catch (e: any) { setOut({ error: String(e) }); }
+    const BASE = import.meta.env.DEV ? "http://localhost:8770" : "";
+    const tok = localStorage.getItem("pd_token");
+    try {
+      const r = await fetch(`${BASE}/query?sql=${encodeURIComponent(q)}`,
+        { headers: tok ? { Authorization: `Bearer ${tok}` } : {} });
+      const j = await r.json();
+      setOut(r.ok ? j : { error: j.error ?? r.status });
+    } catch (e: any) { setOut({ error: String(e) }); }
   };
   return (
     <Card title="self-service SQL (SELECT-only) — episodes, turns, ui_events, semantic_events, lineage" wide>
@@ -215,5 +221,112 @@ export function Sql() {
       {out?.columns && <Table cols={out.columns}
         rows={out.rows.map((r: any[]) => r.map(String))} />}
     </Card>
+  );
+}
+
+// ---------------- Platform (self-service: login, extract, train, logs) -------
+export function Platform() {
+  const [me, setMe] = useState<any>(() => {
+    const t = localStorage.getItem("pd_token");
+    return t ? { token: t } : null;
+  });
+  const [u, setU] = useState("param");
+  const [p, setP] = useState("");
+  const [recipe, setRecipe] = useState("premature-search-v3");
+  const [source, setSource] = useState("hot");
+  const [msg, setMsg] = useState("");
+  const jobs = usePoll<any[]>("/jobs", 5000) ?? [];
+  const priv = usePoll<any>("/privacy", 15000);
+  const logs = usePoll<any>("/logs", 10000);
+  const recipes = usePoll<any[]>("/recipes", 15000) ?? [];
+  const BASE = import.meta.env.DEV ? "http://localhost:8770" : "";
+
+  const post = async (path: string, body: any) => {
+    const r = await fetch(`${BASE}${path}`, {
+      method: "POST", body: JSON.stringify(body),
+      headers: me?.token ? { Authorization: `Bearer ${me.token}` } : {} });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error ?? r.status);
+    return j;
+  };
+  const login = async () => {
+    try {
+      const r = await post("/login", { user: u, password: p });
+      localStorage.setItem("pd_token", r.token); setMe(r); setMsg("");
+    } catch (e: any) { setMsg(String(e.message ?? e)); }
+  };
+  const act = (fn: () => Promise<any>) =>
+    fn().then((j) => setMsg(`ok: ${j.job_id ?? j.recipe_id ?? "done"}`))
+        .catch((e) => setMsg(String(e.message ?? e)));
+
+  if (!me) return (
+    <Card title="sign in (demo-grade auth — documented, not production security)">
+      <div className="filters">
+        <input placeholder="user" value={u} onChange={(e) => setU(e.target.value)}
+               style={{ padding: 6 }} />
+        <input placeholder="password" type="password" value={p}
+               onChange={(e) => setP(e.target.value)} style={{ padding: 6 }} />
+        <button onClick={login}>Sign in</button>
+      </div>
+      {msg && <Note>⚠ {msg}</Note>}
+      <Note>demo users: param / scientist</Note>
+    </Card>
+  );
+
+  return (
+    <>
+      <Card title={`self-service requests — signed in (every job is audited with requested_by)`} wide>
+        <div className="filters">
+          recipe{" "}
+          <select value={recipe} onChange={(e) => setRecipe(e.target.value)}>
+            {recipes.map((r) => <option key={r.recipe_id}>{r.recipe_id}</option>)}
+          </select>
+          source{" "}
+          <select value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="hot">hot (streaming store)</option>
+            <option value="lake">lake (S3 batch, DuckDB)</option>
+          </select>
+          <button onClick={() => act(() =>
+            post("/extract", { recipe_id: recipe, source }))}>
+            Request extraction</button>
+          <button style={{ background: CAT[2] }} onClick={() => act(() =>
+            post("/recipes/approve", { recipe_id: recipe }))}>
+            Approve recipe (admin)</button>
+          <button style={{ background: CAT[1] }} onClick={() => {
+            const ds = jobs.find((j) => j.kind === "extraction" &&
+              j.status === "succeeded")?.result?.dataset;
+            if (!ds) { setMsg("run a successful extraction first"); return; }
+            act(() => post("/train", { dataset: ds,
+              out_name: `ui_${Date.now() % 100000}` })); }}>
+            Launch training on cluster</button>
+          <button style={{ background: "var(--muted)" }} onClick={() => {
+            localStorage.removeItem("pd_token"); setMe(null); }}>Sign out</button>
+        </div>
+        {msg && <Note>{msg}</Note>}
+      </Card>
+      <Card title="jobs (extractions run in-platform; training runs on the V100 cluster)" wide>
+        <Table cols={["job", "kind", "status", "by", "detail"]}
+          rows={jobs.map((j) => [j.job_id, j.kind,
+            <span key="s" className={j.status === "failed" ? "bad" :
+              j.status === "succeeded" ? "good" : ""}>{j.status}</span>,
+            j.requested_by,
+            j.kind === "extraction"
+              ? `${j.result?.manifest?.sequences ?? "…"} seqs · src ${j.result?.manifest?.extraction_source ?? j.params.source}`
+              : `slurm ${j.result?.slurm_id ?? "…"} ${j.result?.slurm_state ?? ""}`])} />
+      </Card>
+      <div className="duo" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Card title="privacy stage (PII scrubbed at ingestion)">
+          <Table cols={["pii type", "redactions"]}
+            rows={Object.entries<any>(priv?.redactions_by_type ?? {})
+              .map(([k, v]) => [k, v])} />
+          <Note>{priv?.note} · total: {priv?.total ?? "…"}</Note>
+        </Card>
+        <Card title="audit log (recent sign-ins)">
+          <Table cols={["user", "role", "when"]}
+            rows={(logs?.logins ?? []).slice(0, 8).map((l: any) => [
+              l.user, l.role, new Date(l.ts * 1000).toLocaleString()])} />
+        </Card>
+      </div>
+    </>
   );
 }

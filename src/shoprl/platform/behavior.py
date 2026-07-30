@@ -245,6 +245,8 @@ def data_quality(store: PlatformStore) -> dict:
         "episodes_with_zero_turns": db.execute(
             "SELECT COUNT(*) FROM episodes e LEFT JOIN turns t"
             " USING(session_id) WHERE t.session_id IS NULL").fetchone()[0],
+        "pii_redactions_on_synthetic_data": db.execute(
+            "SELECT COALESCE(SUM(n),0) FROM privacy_log").fetchone()[0],
         "duplicate_events_exact": db.execute(
             "SELECT COALESCE(SUM(c - 1), 0) FROM (SELECT COUNT(*) c FROM"
             " events GROUP BY kind, session_id, payload)").fetchone()[0],

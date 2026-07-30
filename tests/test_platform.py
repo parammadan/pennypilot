@@ -108,8 +108,21 @@ def test_http_api_roundtrip(tmp_path):
         assert feed[0]["kind"] == "episode_start"
         page = urllib.request.urlopen(base + "/").read().decode()
         assert "PennyData" in page
+        # governance: SQL requires an admin login now
         try:
             urllib.request.urlopen(f"{base}/query?sql=DELETE%20FROM%20episodes")
+            raise AssertionError("unauthenticated SQL must be rejected")
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+        lreq = urllib.request.Request(
+            f"{base}/login", data=json.dumps(
+                {"user": "param", "password": "pennydata"}).encode(),
+            headers={"Content-Type": "application/json"})
+        tok = json.loads(urllib.request.urlopen(lreq).read())["token"]
+        try:
+            urllib.request.urlopen(urllib.request.Request(
+                f"{base}/query?sql=DELETE%20FROM%20episodes",
+                headers={"Authorization": f"Bearer {tok}"}))
             raise AssertionError("non-SELECT must be rejected")
         except urllib.error.HTTPError as e:
             assert e.code == 400 and "error" in json.loads(e.read())
