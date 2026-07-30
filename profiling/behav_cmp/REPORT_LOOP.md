@@ -75,3 +75,27 @@ registered synthesis path (not yet run): RLOO stage on top of C3 — expected
 to recover offline strength while keeping the discipline SFT instilled.
 Loop chapter total: 3 iterations, ~8 GPU-h, two guardrail catches, one
 accepted candidate, one surface-disagreement finding.
+
+---
+# Synthesis verdict (2026-07-30) — rl7b-C3: ALL PREDICTIONS CONFIRMED
+
+| prediction | bar | measured | |
+|---|---|---|---|
+| offline shopping recovers | ≥ 0.85 | **0.86** (C3: 0.52; B3: 0.906) | ✓ |
+| premature-search holds | < 40% | **18.7%** — best ever (B3 55.3%, C3 32%) | ✓ |
+| cannot-redirect | ≥ 10/12 | **12/12** | ✓ |
+| retention | ≥ 90% | **100%** | ✓ |
+| violations | 0 | 0/300 | ✓ |
+
+Replay satisfaction: **133/150** — highest of any model (B3r 114, C2 126/128).
+Corrections 18.7% — best ever. RL on top of behaviorally-recipe'd SFT did not
+erode the asking discipline — it SHARPENED it (premature 32%→18.7%) while
+restoring offline-protocol strength to parity (0.86 vs 0.906, ~1.5 SE).
+
+**The surface disagreement is resolved by TRAINING ORDER, not by choosing a
+surface:** behavioral SFT (what to value) → RL (how to execute) produces a
+model both evaluators prefer. rl7b-C3 is the new champion end-to-end:
+customer behavior → friction evidence → attributed gap → approved recipe →
+two guardrail-caught iterations → accepted SFT → RL synthesis → a model
+better than the one the evidence came from. The loop didn't just close —
+it went around and came out ahead of its own starting point.
