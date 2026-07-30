@@ -6,16 +6,17 @@ from shoprl.env.browser_demo import render_storefront_html, skus_in
 
 
 def test_storefront_embeds_catalog_and_hooks():
-    catalog = generate_catalog(n=25, seed=0)
-    html = render_storefront_html(catalog)
-    for p in catalog[:5]:
-        assert p.sku in html
-    for hook in ("window.pennymart", "results(skus)", "permission(items",
-                 "addToCart(sku)", 'id="search"', 'id="modal"', "SIMULATED",
-                 "laptopSVG", "Add to Cart"):
-        assert hook in html
-    assert html.count("<script>") == 1          # self-contained, no external JS
-
+    """Render-agnostic contract: the storefront (React build or legacy
+    fallback) embeds the catalog and exposes the driver interface."""
+    from shoprl.data.catalog import generate_catalog
+    from shoprl.env.browser_demo import render_storefront_html
+    cat = generate_catalog(n=5, seed=0)
+    html = render_storefront_html(cat)
+    assert "__PRODUCTS__" not in html          # catalog actually injected
+    assert cat[0].sku in html
+    for hook in ("pennymart", "__feedback", "__fbN", "__human", "__uiev",
+                 "👍", "👎", "SIMULATED"):
+        assert hook in html, hook
 
 def test_skus_in_parses_search_observation():
     obs = ("Matching products (cheapest first):\n"

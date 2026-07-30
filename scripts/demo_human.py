@@ -191,8 +191,10 @@ def run_browser_chat(args) -> None:
             # the assistant is Penny; the model tag sits right of her name
             page.evaluate(f"document.title = {json.dumps(args.label + ' — PennyMart')}")
             page.evaluate(
-                "(l)=>{const t=document.getElementById('modeltag');"
-                "if(t) t.textContent=l;}", args.label)
+                "(l)=>{ if (window.pennymart && window.pennymart.modelTag)"
+                " pennymart.modelTag(l);"
+                " else { const t=document.getElementById('modeltag');"
+                " if(t) t.textContent=l; } }", args.label)
         human = BrowserHuman(page)
 
         class UIHumanEnv(SyntheticCatalogEnvironment):
@@ -344,6 +346,11 @@ def run_browser_chat(args) -> None:
             for ue in page.evaluate("window.__uiev.splice(0)"):
                 emitter.emit("ui", type=ue["type"], target=ue.get("target", ""),
                              meta=ue.get("meta", {}), ts=ue.get("ts"))
+                if str(ue.get("target", "")).startswith("cart_remove:"):
+                    emitter.emit("semantic", type="cart_removed",
+                                 turn_index=steps, source="CUSTOMER",
+                                 attributes={"product_id":
+                                             ue["target"].split(":", 1)[1]})
             shot("turn")
             obs = step.observation
             done = step.done

@@ -36,6 +36,17 @@ def render_storefront_html(catalog,
     items = [p.model_dump() if hasattr(p, "model_dump") else dict(p)
              for p in catalog]
     products = json.dumps(items)
+    import os
+    react = os.path.normpath(os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "store", "dist",
+        "index.html"))
+    if os.path.isfile(react):
+        # the React storefront (single-file bundle) preserves the full driver
+        # contract (pennymart.*, __human/__uiev/__feedback); legacy HTML below
+        # remains the no-node fallback
+        return (open(react).read()
+                .replace("__TITLE__", title)
+                .replace("__PRODUCTS__", products))
     return """<!doctype html><html><head><meta charset="utf-8">
 <title>__TITLE__</title><style>
   :root { --nav:#131921; --nav2:#232f3e; --link:#007185; --price:#0f1111;

@@ -126,7 +126,7 @@ SEMANTIC_TYPES = frozenset({
     "constraint_requested", "constraint_revealed", "search_executed",
     "recommendation_shown", "customer_correction", "permission_requested",
     "permission_denied", "permission_granted", "cart_add_attempted",
-    "cart_add_succeeded", "conversation_abandoned"})
+    "cart_add_succeeded", "cart_removed", "conversation_abandoned"})
 
 
 class SemanticEvent(Envelope):
