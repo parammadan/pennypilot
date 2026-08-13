@@ -1,0 +1,287 @@
+\documentclass[11pt]{article}
+
+% ---- Overleaf-ready preamble (compiles with pdfLaTeX; no shell-escape needed) ----
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{codebg}{gray}{0.96}
+\lstdefinestyle{json}{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  showstringspaces=false,
+  columns=fullflexible,
+  xleftmargin=2pt,
+}
+
+\title{PennyPilot: Permission-Gated, Hidden-Constraint Shopping with\\
+Reinforcement-Learning Post-Training on Constrained Hardware}
+\author{Param Madan}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present PennyPilot, a multi-turn, multilingual shopping agent trained via a
+full reinforcement-learning post-training pipeline (SFT $\rightarrow$ RLOO/GRPO)
+on a single 32\,GB V100 GPU. The task is designed so that naive strategies fail:
+the shopper's budget and 2--3 hard requirements are hidden and revealed only
+through correct clarifying questions, and under partial discovery the cheapest
+visible item is a distractor in 99/100 scenarios ($n{=}100$, measured). Rewards
+are computed against catalog ground truth --- there is no learned reward model,
+and therefore nothing to hack. A structural permission gate makes any cart
+addition without an explicit, per-SKU grant unrewardable, holding safety at 0
+violations across every evaluation run. We report the full progression from a
+1.5B validation model to a 7B production model, a pre-registered comparison of
+RLOO against GRPO under matched rollout budgets, a systems/efficiency campaign
+(SS0--SS13) that measured rather than assumed every optimization, and ---
+critically --- the negative and partial results alongside the positive ones.
+PennyPilot is the post-training arm of a longer lineage: it extends
+\emph{shoprl-fabric}, a single-machine multi-turn RL platform, by adding hidden
+needs, a permission gate, and an information-gain reward.
+\end{abstract}
+
+\section{Introduction}
+Most public RL-post-training demonstrations either (a) train on tasks that are
+already near-saturated for the base model, making the ``improvement'' hard to
+distinguish from noise, or (b) omit the systems engineering that determines
+whether the loop is even trainable on the hardware actually available to most
+practitioners (a single consumer/academic GPU, not a multi-node cluster).
+PennyPilot addresses both: the task's difficulty is \emph{measured and gated}
+before any training spend, and the entire pipeline --- rollout, reward,
+optimization, evaluation, checkpointing --- is built and validated on a single
+Volta-generation V100.
+
+The agent is the workload; the actual engineering target is the training
+infrastructure: multi-turn RL stability, a safety mechanism that survives
+optimization pressure, and profiling-driven rollout efficiency.
+
+\section{Task Design}
+The shopper's true objective is hidden from the agent: a budget ceiling and 2--3
+hard constraints (brand, minimum RAM, minimum battery life, maximum weight),
+disclosed one at a time and only in response to a relevant clarifying question.
+This is a deliberate difficulty mechanism, not decoration: under partial
+constraint discovery, the cheapest catalog item satisfying the \emph{known}
+constraints fails at least one \emph{undiscovered} constraint in 99 of 100
+generated scenarios. A policy that grabs the first plausible result loses; a
+policy that disciplines itself to fully enumerate constraints before committing
+wins. This gives the reward signal real texture instead of a near-ceiling pass
+rate from turn one.
+
+Rewards are scored against the catalog's real specifications --- never against
+the model's stated beliefs about them --- so there is no reward model in the loop
+and no surface for reward hacking via plausible-sounding but false claims.
+
+\section{Method}
+
+\subsection{Structured action interface}
+The policy emits single-line JSON actions rather than raw browser selectors or
+free-form tool calls:
+\begin{lstlisting}[style=json]
+{"action": "ask_user", "question": "What is your total budget?"}
+{"action": "search", "query": "laptop under 2000 dollars"}
+{"action": "select_product", "product_id": "LAP-0014", "reason": "cheapest valid"}
+{"action": "request_cart_permission", "items": ["LAP-0014"], "estimated_total": 796.29}
+{"action": "add_to_cart", "product_id": "LAP-0014"}
+\end{lstlisting}
+Environment adapters translate these into effects: a synthetic catalog
+environment (training and most evaluation), a WebShop-compatible adapter
+(unseen-product generalization test), and a Playwright browser mirror used only
+for human-facing demo/replay --- the browser is never in the training loop, only
+a projection of decisions already made.
+
+\subsection{Structural permission gate}
+\texttt{add\_to\_cart} for a SKU succeeds only if that exact SKU appears in an
+explicit, previously granted permission set. This is enforced in the
+environment's dialogue-state transition function, \emph{not} in the reward term:
+no combination of policy weights can produce a rewarded cart addition without a
+real, matching grant having occurred first. Ambiguous replies do not count as
+approval, and a held ``no'' survives subsequent permission requests for the same
+or a different item until explicitly lifted. Measured result: 0 permission
+violations across every SFT, RLOO, GRPO, and zero-shot-transfer evaluation run in
+this work.
+
+\subsection{Environment-side dialogue state}
+Corrections (``actually, my budget is \$90,'' ``I already have sunscreen'') are
+applied to a structured dialogue state that invalidates stale plans; the model's
+context window is a \emph{view} onto this state, never its source of truth. A
+deterministic bilingual (English/Spanish, including code-switched input) language
+layer extracts constraints regardless of which language they arrive in.
+
+\subsection{Loss-mask verification}
+SFT loss is computed on policy tokens only. A reference-exact verifier crashes the
+training run if any environment- or user-authored token ever leaks into the loss
+--- the specific failure mode in which training loss improves while the policy's
+actual behavior degrades, because it is partially learning to imitate the
+environment rather than to act in it.
+
+\subsection{Precision on Volta}
+The V100 (Volta) lacks native \texttt{bf16} tensor-core support; naive
+\texttt{bf16} training on this hardware falls back to software emulation. We
+instead train in \texttt{fp16} with dynamic loss scaling (\texttt{GradScaler}),
+which is necessary, not optional --- unscaled \texttt{fp16} training diverges at
+step 1 on this task. Measured: \texttt{fp16}+\texttt{GradScaler} is
+$4.27\times$ faster than the \texttt{bf16}-emulated alternative, with both
+numerically stable once the scaler is applied.
+
+\section{Experimental Setup}
+\textbf{Models.} Qwen2.5-1.5B-Instruct is used first, to validate the entire
+pipeline (environment, SFT recipe, RL loop, evaluation harness) at low cost.
+Qwen2.5-7B-Instruct is the production line. For RL, a shared-reference trick ---
+one frozen base model carrying two separate LoRA adapters (policy and reference)
+--- lets 7B policy+reference RL fit in 32\,GB, avoiding two full model copies.
+
+\textbf{Hardness gate.} Before any training spend, we measure the untrained base
+model's success rate on the held-out hard split ($n{=}64$): 12.5\%. This falls
+inside a pre-registered acceptance band of 10--40\% --- enough signal to
+bootstrap SFT from, enough headroom for RL to matter. A task solved at 90\%
+zero-shot would not have justified this pipeline.
+
+\textbf{Algorithms.} RLOO (critic-free, leave-one-out baseline) is the bring-up
+algorithm; GRPO is compared against it at an \emph{equal} rollout budget (400
+trajectories) so that any difference is attributable to the advantage rule, not
+to sample count.
+
+\section{Results}
+\begin{table}[h]
+\centering
+\begin{tabular}{lc}
+\toprule
+\textbf{Stage} & \textbf{Task success (es-en hard split)} \\
+\midrule
+Base model (hardness gate) & 12.5\% \\
+SFT (env-recorded multilingual demos) & 48.4\% (RL-difficulty); 98--100\% (standard) \\
+RLOO, 50 steps & 92.2\% \\
+GRPO, equal 400-trajectory budget & 100.0\% \\
+GRPO + 4-epoch clipped reuse & 100.0\% (KL max 0.027) \\
+\bottomrule
+\end{tabular}
+\caption{Learning progression. Every arm is violation-free and every number is
+held-out.}
+\end{table}
+
+\textbf{H1 --- GRPO instability is regime-dependent, not intrinsic.} GRPO's
+reputation for training instability is often reported without reference to the
+reward regime it was observed in. Here, measured KL stays at 0.013 (a
+healthy-variance regime) versus 0.58--0.99 drift on a saturated task using the
+identical stack. Both the hypothesis and the acceptance threshold were registered
+before the run.
+
+\textbf{H2 --- multi-epoch reuse is sufficient but not necessary.} The reuse arm
+(H2) reached the same 100\% ceiling as single-pass advantage scaling; reuse did
+not add task success beyond what scaling alone already achieved, and was
+effectively free in wall-clock terms since rollout dominates iteration time
+regardless (Sec.~\ref{sec:systems}). This mechanism-level finding, not just the
+top-line number, was the pre-registered target.
+
+\textbf{H3 --- catastrophic forgetting is rehearsal-mitigable at no cost (7B).} A
+specialist SFT arm (task-only demonstrations) loses general-chat retention
+(12.5\%$\rightarrow$10.0\%) alongside modest shopping competence (0.820). A
+rehearsal arm --- 25\% self-distilled general-chat data mixed into the same SFT
+stage --- holds retention at 97.5\% while \emph{exceeding} the specialist's
+shopping competence (0.859) after identical RL. Rehearsal was not a trade-off
+here; it dominated on both axes.
+
+\textbf{Zero-shot generalization (WebShop).} Transferred to an unseen-product,
+different-backend environment with no fine-tuning: 0 permission violations
+(safety transfers completely), 60\% task success (competence transfers
+partially). This is reported as an honest domain-shift datapoint, not elided.
+
+\textbf{Preemption safety.} A live mid-run SIGTERM $\rightarrow$ Slurm requeue
+$\rightarrow$ resume drill produced a clean 20-of-20-step continuation with KL
+trace continuous across the kill seam --- preemption safety was measured
+operationally, not only asserted from the checkpoint code.
+
+\section{Systems and Efficiency}
+\label{sec:systems}
+A 14-row profiling campaign (SS0--SS13) measured every proposed optimization
+before adopting or rejecting it:
+\begin{itemize}
+\item Rollout generation is 95.8\% of RL iteration wall-clock (three consistent
+profiling passes) --- the correct place to spend effort is rollout, not the
+optimizer step.
+\item End-to-end iteration time: 93.2\,s $\rightarrow$ 13.4\,s ($6.96\times$),
+via batched lockstep rollouts ($4.98\times$ more tokens/iteration, $6.4\times$
+more episodes/minute), merge-at-sync vLLM serving ($2.3\times$ alone --- and the
+workaround for Volta's non-functional LoRA-serving kernels), and checkpoint-off
+updates at small batch sizes ($1.48\times$).
+\item Measured and \emph{rejected}: an inference-engine swap alone ($1.06\times$,
+not worth its complexity in isolation), prefix caching (hardware-gated on Volta
+and $\le 7\%$/turn at these sequence lengths even where available), request
+packing (8.2\% token waste at this distribution), and a custom Triton kernel ---
+profiled ceiling of 0.84\% of iteration time, and therefore deliberately not
+written. The profiling data is the justification for \emph{not} building
+something, which is as load-bearing a result as the optimizations that were
+adopted.
+\end{itemize}
+
+\section{Limitations (honest)}
+\begin{itemize}
+\item The scripted user simulator has cosmetic phrasing quirks; a frozen-LLM user
+model is a planned drop-in behind the same interface.
+\item Mid-flow ground-truth corrections (e.g., a live budget revision) are
+deferred pending scenario-schema support --- not implemented, not faked.
+\item The WebShop evaluation uses a dialect-faithful in-repo backend, verified
+against the real WebShop parser; the original princeton-nlp instance remains a
+documented, not-yet-wired backend.
+\item \texttt{vLLM} LoRA serving and prefix caching are hardware-gated on Volta
+(the relevant Triton kernels require Ampere or newer); the merge-at-sync
+workaround is documented with its correctness asserts.
+\item H2's registered mechanism (multi-epoch reuse) was not the reason GRPO
+reached its ceiling --- advantage scaling alone was sufficient. The reuse arm's
+\emph{own} hypothesized benefit is therefore an open, documented follow-up.
+\item Reward-shaping extension terms specified in early design notes
+(need-coverage, state-consistency, trajectory-efficiency) were not implemented;
+the shipped reward is the verifiable base term plus information gain. Its visible
+cost is a measured tendency toward over-asking clarifying questions --- an honest,
+named consequence rather than an unexplained quirk.
+\item No preference-optimization stage (DPO/RLHF-style) has been run, despite
+collecting explicit thumbs-up/down feedback during live use that would support
+one. This is the single largest remaining gap between this work and a
+``complete'' modern post-training pipeline.
+\end{itemize}
+
+\section{Vision: Agents over a Self-Hosted Distributed Retrieval Substrate}
+PennyPilot's \texttt{search} action is served, today, by a synthetic catalog
+environment --- a controlled ground-truth index that makes rewards verifiable.
+The natural next step is to replace that index with a real retrieval substrate
+without giving up the properties that made the training loop honest.
+
+We are building that substrate separately as \emph{Aether}: a from-scratch,
+single-operator \textbf{distributed spatial--vector search engine in Rust}
+(sharded \texttt{shard-node}s behind a \texttt{coordinator}, gRPC transport,
+leader election with automatic failover, cross-cluster federation, a
+natural-language query layer, and provenance-carrying briefings). Aether is
+already operational end to end --- a running cluster demonstrates coordinator-
+driven leader failover and query fan-out across shards.
+
+The vision is their composition: PennyPilot as the \emph{policy} and Aether as
+the \emph{environment/retrieval tier}. The agent's structured \texttt{search}
+action fans out over Aether's sharded index instead of a synthetic catalog;
+constraint filters become Aether's structured filters (which already aggregate
+without shipping raw values); and the agent's final briefing inherits Aether's
+provenance trail, so a recommendation is traceable to the exact shards and
+records that produced it. This turns a controlled RL benchmark into a
+self-hosted agentic-retrieval system --- an LLM policy that reasons and asks,
+grounded on a fault-tolerant distributed index that a single practitioner can
+own and operate. Making the reward verifiable against a \emph{live, distributed}
+ground truth (rather than a static synthetic one) is the central open research
+problem this composition raises, and the direction we intend to pursue.
+
+\section{Conclusion}
+PennyPilot demonstrates that rigorous RL post-training --- pre-registered
+hypotheses, measured hardness gating, honest negative and partial results, and a
+safety mechanism verified rather than assumed --- is achievable end to end on a
+single academic GPU. The central methodological claim is not any individual
+number in Section~5, but the discipline connecting them: every reported result
+was predicted before it was measured, and every reported optimization was adopted
+or rejected based on a profile, not intuition.
+
+\end{document}
