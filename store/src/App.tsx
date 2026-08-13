@@ -107,12 +107,7 @@ export default function App() {
                 onClick={() => { actions.openCart(); setDrawer(true); }}>
             🛒 Cart <b id="cartn">{s.cart.length}</b></span>
         </header>
-        <div id="subnav"><span>All</span><span>Laptops</span><span>Deals</span>
-          <span className="sim">● SIMULATED — no real purchases, stylized images</span></div>
-        {s.demoHint && (
-          <div id="hintbar">🎫 <b>Demo hint (only you see this — the assistant
-            does NOT):</b> {s.demoHint} — reveal these only when it asks.</div>
-        )}
+        <div id="subnav"><span>All</span><span>Laptops</span><span>Deals</span></div>
         <div id="resultbar">{s.resultBar}</div>
         <div id="grid">
           {s.grid === null ? (

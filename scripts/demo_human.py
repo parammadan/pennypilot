@@ -305,11 +305,21 @@ def run_browser_chat(args) -> None:
                 pass
             exec_text = action_text
             if args.chat and "{" not in action_text:
-                # rehearsal-trained policies answer non-shopping turns as pure
-                # prose (no action) — route through ask_user so the env waits
-                # for the human instead of flagging an invalid action
-                exec_text = action_text + " " + json.dumps(
-                    {"action": "ask_user", "question": action_text})
+                pending = [s for s in env.state.permission_items
+                          if s not in env.state.cart_contents]
+                if env.state.permission_status == "granted" and pending:
+                    # model narrated the add ("adding it now") without the
+                    # JSON tag — permission was already explicitly granted
+                    # by the human, so complete that already-authorized
+                    # action instead of silently dropping it into ask_user
+                    exec_text = action_text + " " + json.dumps(
+                        {"action": "add_to_cart", "product_id": pending[0]})
+                else:
+                    # rehearsal-trained policies answer non-shopping turns as
+                    # pure prose (no action) — route through ask_user so the
+                    # env waits for the human instead of flagging invalid
+                    exec_text = action_text + " " + json.dumps(
+                        {"action": "ask_user", "question": action_text})
             if args.chat:
                 # draw the reply BEFORE the env blocks waiting for the human,
                 # or the user and the agent deadlock staring at each other
@@ -472,8 +482,14 @@ def run_terminal_chat(args) -> None:
         print(f"🤖 agent: {_agent_say(action_text, args.chat)}")
         exec_text = action_text
         if args.chat and "{" not in action_text:
-            exec_text = action_text + " " + json.dumps(
-                {"action": "ask_user", "question": action_text})
+            pending = [s for s in env.state.permission_items
+                      if s not in env.state.cart_contents]
+            if env.state.permission_status == "granted" and pending:
+                exec_text = action_text + " " + json.dumps(
+                    {"action": "add_to_cart", "product_id": pending[0]})
+            else:
+                exec_text = action_text + " " + json.dumps(
+                    {"action": "ask_user", "question": action_text})
         step = env.execute_text(exec_text)
         if step.observation:
             print(f"🏪 store/you: {step.observation}")
