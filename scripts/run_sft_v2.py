@@ -43,6 +43,9 @@ def main() -> None:
     ap.add_argument("--rehearsal", default=None,
                     help="JSONL of {q,a} general-chat exemplars to MIX IN "
                          "(H3 Arm B rehearsal); omit for the specialist arm")
+    ap.add_argument("--rehearsal-n", type=int, default=None,
+                    help="use only the first N rehearsal exemplars (dose arms: "
+                         "fraction = N / (demos + N))")
     ap.add_argument("--demos", type=int, default=1000)
     ap.add_argument("--cannot-frac", type=float, default=None,
                     help="override cannot_fulfill share in --mix-generated")
@@ -106,6 +109,11 @@ def main() -> None:
         print(f"[sft-v2] shopping demos: {json.dumps(demo_v2_stats(demos))}")
     if args.rehearsal:                        # H3 Arm B: mix in general chat
         reh = [json.loads(l) for l in open(args.rehearsal) if l.strip()]
+        if args.rehearsal_n is not None:
+            if len(reh) < args.rehearsal_n:
+                raise SystemExit(f"only {len(reh)} rehearsal exemplars "
+                                 f"< --rehearsal-n {args.rehearsal_n}")
+            reh = reh[:args.rehearsal_n]
         reh_demos = [DemoV2(scenario_id=f"chat-{i}", kind="rehearsal",
                             language=r.get("lang", "en"), target_sku="", n_asks=0,
                             turns=[DemoTurnV2("user", r["q"]),

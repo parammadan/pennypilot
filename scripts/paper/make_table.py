@@ -58,6 +58,9 @@ def load_runs(root: str) -> list[dict]:
                 row[k] = rep.get(k)
             row["n"] = rep["n"]
             row["success_ci95"] = wilson(rep["task_success_rate"], rep["n"])
+        ret = os.path.join(d, "retention.json")
+        row["retention_40q"] = (json.load(open(ret))["retention_pct"] / 100
+                                if os.path.exists(ret) else None)
         row["mmlu_acc"] = _lm_eval_metric(os.path.join(d, "mmlu"), "mmlu", "acc")
         row["ifeval_prompt_strict"] = _lm_eval_metric(
             os.path.join(d, "ifeval"), "ifeval", "prompt_level_strict_acc")
@@ -72,7 +75,8 @@ def aggregate(rows: list[dict]) -> list[dict]:
     out = []
     for (arm, cond), rs in sorted(groups.items()):
         agg = {"arm": arm, "condition": cond, "seeds": len(rs)}
-        for k in SHOP_KEYS + ["mmlu_acc", "ifeval_prompt_strict"]:
+        for k in SHOP_KEYS + ["retention_40q", "mmlu_acc",
+                              "ifeval_prompt_strict"]:
             vals = [r[k] for r in rs if r.get(k) is not None]
             agg[k] = (statistics.mean(vals) if vals else None,
                       statistics.stdev(vals) if len(vals) > 1 else None)
@@ -91,6 +95,7 @@ def to_tex(aggs: list[dict]) -> str:
     cols = [("task_success_rate", "Success", True),
             ("mean_regret_usd", "Regret (\\$)", False),
             ("permission_violation_rate", "Viol.", True),
+            ("retention_40q", "Ret-40", True),
             ("mmlu_acc", "MMLU", True),
             ("ifeval_prompt_strict", "IFEval", True)]
     lines = ["\\begin{tabular}{ll" + "c" * (len(cols) + 1) + "}", "\\toprule",
