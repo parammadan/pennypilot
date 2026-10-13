@@ -86,8 +86,11 @@ export default function App() {
           })}
           {s.busy && <div id="typing"><span /><span /><span /></div>}
         </div>
+        {s.hint && (
+          <div id="pendingq">🤖 <b>{s.hint}</b></div>
+        )}
         <div id="saybar">
-          <input id="say" placeholder={s.hint} autoComplete="off" value={say}
+          <input id="say" placeholder="Type your reply…" autoComplete="off" value={say}
                  disabled={s.busy} onChange={(e) => setSay(e.target.value)}
                  onKeyDown={(e) => e.key === "Enter" && send()} />
           <button id="send" onClick={send}>Send</button>

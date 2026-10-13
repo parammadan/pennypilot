@@ -6,7 +6,8 @@
 #   sbatch [slurm flags] scripts/paper/eval_general.sh <model> <label> <adapter|base> [mmlu_limit] [ifeval_limit]
 # lm-eval runs in its own venv (vllm-free, transformers 4.49) — never the shoprl env.
 set -euo pipefail
-export HF_HOME=/scratch/madan.pa/.hf HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+export HF_HOME=/scratch/madan.pa/.hf HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1} \
+       HF_DATASETS_OFFLINE=${HF_DATASETS_OFFLINE:-1} \
        PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
 cd "$HOME/pennywise-v100-infra"
 V=/scratch/madan.pa/venvs/lmeval

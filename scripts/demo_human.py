@@ -89,8 +89,8 @@ class BrowserHuman:
 
     def utter(self, intent, scenario, accepted=None):
         if intent == "greet":
-            return self._wait("say hi + what you're shopping for (any language; "
-                              "no specifics yet)…",
+            return self._wait("say hi (English or Spanish) + what you're "
+                              "shopping for — no specifics yet…",
                               "Necesito una laptop, can you help?")
         if intent == "budget":
             return self._wait(f"tell it your budget (your brief: "
@@ -226,7 +226,7 @@ def run_browser_chat(args) -> None:
 
             def _ask(self, aj, question):
                 before = self._consistent_count()
-                user = human._wait(f"🤖 {question}", "hmm, whatever you think")
+                user = human._wait(question, "hmm, whatever you think")
                 self.state.observe_user_message(user)   # YOUR words = the truth
                 gain = self._gain(before, self._consistent_count())
                 understood = (self.state.normalized_english_intent
@@ -314,6 +314,18 @@ def run_browser_chat(args) -> None:
                     # action instead of silently dropping it into ask_user
                     exec_text = action_text + " " + json.dumps(
                         {"action": "add_to_cart", "product_id": pending[0]})
+                elif (env.state.permission_status == "not_requested"
+                      and len(env.state.selected_products) == 1):
+                    # model narrated "shall I add this to cart" without the
+                    # JSON — a product is already selected and permission
+                    # was never formally requested, so synthesize the
+                    # request so the real permission modal actually opens
+                    sku = env.state.selected_products[0]
+                    est = env.state.estimated_total or (
+                        env.idx[sku].price if sku in env.idx else 0.0)
+                    exec_text = action_text + " " + json.dumps(
+                        {"action": "request_cart_permission",
+                         "items": [sku], "estimated_total": est})
                 else:
                     # rehearsal-trained policies answer non-shopping turns as
                     # pure prose (no action) — route through ask_user so the
@@ -487,6 +499,14 @@ def run_terminal_chat(args) -> None:
             if env.state.permission_status == "granted" and pending:
                 exec_text = action_text + " " + json.dumps(
                     {"action": "add_to_cart", "product_id": pending[0]})
+            elif (env.state.permission_status == "not_requested"
+                  and len(env.state.selected_products) == 1):
+                sku = env.state.selected_products[0]
+                est = env.state.estimated_total or (
+                    env.idx[sku].price if sku in env.idx else 0.0)
+                exec_text = action_text + " " + json.dumps(
+                    {"action": "request_cart_permission",
+                     "items": [sku], "estimated_total": est})
             else:
                 exec_text = action_text + " " + json.dumps(
                     {"action": "ask_user", "question": action_text})
