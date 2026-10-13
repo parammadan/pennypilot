@@ -52,7 +52,12 @@ def main() -> None:
     ap.add_argument("--dataset-file", default=None,
                     help="train on a recipe-exported dataset (messages JSONL)"
                          " INSTEAD of generated demos; --rehearsal still mixes")
-    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seed", type=int, default=0,
+                    help="DEMO-generation seed (keep 0: eval/splits.py "
+                         "dedups against the seed-0 SFT pool)")
+    ap.add_argument("--train-seed", type=int, default=None,
+                    help="seeds torch/numpy/random (shuffles, init); "
+                         "None = unseeded, the pre-paper behaviour")
     ap.add_argument("--catalog-size", type=int, default=300)
     ap.add_argument("--batch-size", type=int, default=2)
     ap.add_argument("--max-len", type=int, default=1024,
@@ -66,6 +71,10 @@ def main() -> None:
     ap.add_argument("--out-dir", default="runs/sft_v2")
     args = ap.parse_args()
 
+    from shoprl.repro import seed_everything, write_manifest
+    if args.train_seed is not None:
+        seed_everything(args.train_seed)
+    write_manifest(args.out_dir, args)
     import torch
 
     from shoprl.data.catalog import generate_catalog
@@ -107,6 +116,9 @@ def main() -> None:
         _rnd.Random(args.seed).shuffle(demos)
         print(f"[sft-v2] +{len(reh_demos)} rehearsal exemplars "
               f"({len(reh_demos)/len(demos)*100:.0f}% of mix), shuffled")
+    if args.train_seed is not None:           # seed varies batch order too,
+        import random as _rnd                 # not just LoRA init
+        _rnd.Random(f"sft-order-{args.train_seed}").shuffle(demos)
 
     built = build_model(args.model, method=args.method,
                         dtype=torch.float16, device="cuda",

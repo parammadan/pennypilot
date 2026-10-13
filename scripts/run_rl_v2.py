@@ -50,8 +50,15 @@ def main() -> None:
     ap.add_argument("--save-every", type=int, default=10)
     ap.add_argument("--resume", default=None, help='"latest" or a step-N dir')
     ap.add_argument("--out-dir", default="runs/rl_v2")
+    ap.add_argument("--train-seed", type=int, default=None,
+                    help="seeds torch/numpy/random (rollout sampling); "
+                         "None = unseeded, the pre-paper behaviour")
     args = ap.parse_args()
 
+    from shoprl.repro import seed_everything, write_manifest
+    if args.train_seed is not None:
+        seed_everything(args.train_seed)
+    write_manifest(args.out_dir, args)
     import torch
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer

@@ -36,9 +36,21 @@ def main() -> None:
     ap.add_argument("--n-must-haves", type=int, nargs=2, default=None)
     ap.add_argument("--valid-range", type=int, nargs=2, default=None)
     ap.add_argument("--max-new-tokens", type=int, default=64)
+    ap.add_argument("--split", default=None,
+                    choices=["registered", "paper", "clean"],
+                    help="registered = seed-5001 RL-difficulty split (legacy, "
+                         "train-contaminated); paper = held-out catalog "
+                         "(PRIMARY); clean = same catalog, overlap dropped. "
+                         "Omit for the pre-paper flag behaviour.")
+    ap.add_argument("--shuffle-search", action="store_true",
+                    help="randomize search-result order (cheapest != #1)")
+    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default="runs/eval_v2/report.json")
     args = ap.parse_args()
 
+    from shoprl.repro import seed_everything, write_manifest
+    seed_everything(args.seed)
+    write_manifest(os.path.dirname(args.out) or ".", args)
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -62,7 +74,18 @@ def main() -> None:
     model.eval()
 
     catalog = generate_catalog(n=args.catalog_size, seed=0)
-    if args.scenario_seed is not None or args.n_must_haves or args.valid_range:
+    if args.split == "paper":
+        from shoprl.eval.splits import paper_eval_split
+        catalog, scenarios = paper_eval_split(n=args.n,
+                                              catalog_size=args.catalog_size)
+    elif args.split == "clean":
+        from shoprl.eval.splits import clean_eval_scenarios
+        scenarios = clean_eval_scenarios(catalog, n=args.n)
+    elif args.split == "registered":
+        from shoprl.env.scenario import generate_hard_scenarios
+        from shoprl.eval.splits import EVAL_SPLIT
+        scenarios = generate_hard_scenarios(catalog, n=args.n, **EVAL_SPLIT)
+    elif args.scenario_seed is not None or args.n_must_haves or args.valid_range:
         from shoprl.env.scenario import generate_hard_scenarios
         scenarios = generate_hard_scenarios(
             catalog, n=args.n, seed=args.scenario_seed or 3000,
@@ -91,11 +114,14 @@ def main() -> None:
                           lambda: HFPolicyV2(model, tok, system=SYS,
                                              max_new_tokens=args.max_new_tokens),
                           name=os.path.basename(args.ckpt or args.model),
-                          language=lang, on_episode=dump_if_violation)
+                          language=lang, on_episode=dump_if_violation,
+                          shuffle_search=args.shuffle_search)
         print(rep.as_row())
         reports.append(rep.__dict__)
 
     summary = {"model": args.model, "ckpt": args.ckpt, "n": args.n,
+               "split": args.split, "shuffle_search": args.shuffle_search,
+               "seed": args.seed,
                "wall_seconds": round(time.time() - t0, 1), "reports": reports}
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w") as f:
