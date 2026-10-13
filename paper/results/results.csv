@@ -1,0 +1,5 @@
+arm,condition,dir,ifeval_prompt_strict,invalid_action_rate,mean_regret_usd,mmlu_acc,n,optimal_rate,permission_violation_rate,seed,success_ci95,task_success_rate
+base_1p5b,paper,paper/results/raw/base_1p5b__s0__paper,,0.10426229508196722,0.0,,128,0.0234375,0.0078125,0,"(0.008, 0.0666)",0.0234375
+base_1p5b,paper-shuffle,paper/results/raw/base_1p5b__s0__paper-shuffle,,0.07260726072607261,52.64142857142857,,128,0.03125,0.0234375,0,"(0.0267, 0.1086)",0.0546875
+base_7b-v2prompt,paper,paper/results/raw/base_7b-v2prompt__s0__paper,,0.0,106.945,,128,0.0078125,0,0,"(0.0043, 0.0552)",0.015625
+base_7b,paper,paper/results/raw/base_7b__s0__paper,,1.0,,,128,0,0,0,"(0.0, 0.0291)",0

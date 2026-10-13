@@ -1,0 +1,48 @@
+{
+  "argv": [
+    "scripts/eval_v2.py",
+    "--model",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "--system",
+    "v2",
+    "--languages",
+    "es-en",
+    "--max-new-tokens",
+    "128",
+    "--out",
+    "/scratch/madan.pa/paper/eval/base_7b-v2prompt__s0__paper/shop.json",
+    "--split",
+    "paper",
+    "--n",
+    "128"
+  ],
+  "args": {
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "ckpt": null,
+    "system": "v2",
+    "n": 128,
+    "languages": [
+      "es-en"
+    ],
+    "catalog_size": 300,
+    "scenario_seed": null,
+    "n_must_haves": null,
+    "valid_range": null,
+    "max_new_tokens": 128,
+    "split": "paper",
+    "shuffle_search": false,
+    "seed": 0,
+    "out": "/scratch/madan.pa/paper/eval/base_7b-v2prompt__s0__paper/shop.json"
+  },
+  "git_sha": "c6c1123989346adaec6c580d3d1539aaa719ca83",
+  "git_dirty": false,
+  "slurm_job_id": "11022117",
+  "host": "d1010",
+  "started_unix": 1791858701,
+  "versions": {
+    "python": "3.12.13",
+    "torch": "2.5.1+cu121",
+    "transformers": "5.13.1",
+    "peft": "0.19.1"
+  }
+}
