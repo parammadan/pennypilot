@@ -16,6 +16,7 @@ source.
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass
 
 from shoprl.actions import (AbstractAction, AddToCart, AskUser, InspectProduct,
@@ -54,8 +55,12 @@ class SyntheticCatalogEnvironment:
     def __init__(self, catalog: list[Product], scenario: Scenario,
                  idx: dict[str, Product] | None = None, max_turns: int = 12,
                  info_coef: float = 0.05, language: str = "en",
-                 conversation: ConversationModel | None = None):
+                 conversation: ConversationModel | None = None,
+                 shuffle_search: bool = False):
         self.catalog = catalog
+        # eval-only probe: same top-10 result SET, order randomized (seeded by
+        # scenario), so "pick item #1" no longer equals "pick the cheapest"
+        self.shuffle_search = shuffle_search
         self.scenario = scenario
         self.idx = idx or {p.sku: p for p in catalog}
         self.max_turns = max_turns
@@ -122,6 +127,9 @@ class SyntheticCatalogEnvironment:
             return self._ask(aj, action.question)
         if isinstance(action, Search):
             cands = self._filter_products(k=10)
+            if self.shuffle_search:
+                random.Random(f"shuffle-{self.scenario.scenario_id}-"
+                              f"{len(self.turns)}").shuffle(cands)
             missing = [k for k in self._required() if k not in self._discovered]
             self._sem("search_executed",
                       known_constraints=sorted(self._discovered),
