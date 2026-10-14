@@ -20,7 +20,7 @@
 \newcommand{\pmstd}[2]{#1\,{\scriptsize$\pm$#2}}
 
 \title{Agents That Forget How to Chat:\\
-Self-Distilled Rehearsal Preserves General Behavior\\
+Self-Distilled Rehearsal Prevents Tool-Call Collapse\\
 Through SFT and RL Post-Training of a Shopping Agent}
 \author{Param Madan\\Northeastern University\\\texttt{madan.pa@northeastern.edu}}
 \date{}
@@ -42,10 +42,11 @@ prompt-level strict accuracy falls from 64.5\% to \pmstd{38.8}{0.8}\%. MMLU
 log-likelihood accuracy is unchanged (\(\approx\)74\% in every arm): the
 model's knowledge survives while its behavior does not. Mixing 25\%
 \emph{self-distilled} rehearsal (open-ended Dolly prompts answered by the
-untrained base model) into SFT keeps general behavior at or above the base
-model through both SFT and RL (100.0\% retention, \pmstd{65.5}{0.5}\% IFEval),
-at a cost in task success (\pmstd{83.9}{9.4}\% vs.\ \pmstd{93.8}{2.7}\%) and
-higher seed variance. We release code, configurations, per-run manifests and
+untrained base model) into SFT keeps both measures at or above the base model through SFT and RL
+(100.0\% Retention-40, \pmstd{65.5}{0.5}\% IFEval). Task success is lower on
+average (\pmstd{83.9}{9.4}\% vs.\ \pmstd{93.8}{2.7}\%) and more variable
+across seeds, although with three seeds this gap is not statistically
+significant (exact permutation test \(p=0.30\)). We release code, configurations, per-run manifests and
 all raw evaluation outputs.
 \end{abstract}
 
@@ -64,26 +65,34 @@ known~\citep{mccloskey1989catastrophic,kirkpatrick2017overcoming} and has been
 measured in LLM continual fine-tuning~\citep{luo2023empirical}; replaying old
 data (rehearsal) is one of the oldest mitigations~\citep{robins1995catastrophic},
 and mixing pre-training data into RLHF updates is standard
-practice~\citep{ouyang2022training}. Self-distillation, i.e.\ training on the
-base model's own responses, has been proposed to narrow the distribution gap
-during fine-tuning~\citep{yang2024selfdistillation}. What is less documented is
-how forgetting behaves across the \emph{two-stage} agent pipeline (SFT then
-RL), whether RL repairs or compounds it, and \emph{what kind} of ability is
-lost. This paper contributes a small, controlled, fully reproducible
-measurement of those questions:
+practice~\citep{ouyang2022training}. Closest to our method, self-distillation fine-tuning
+(SDFT)~\citep{yang2024selfdistillation} reduces forgetting by having the seed
+model rewrite the task data in its own words before SFT. Our work differs in
+three respects. (i)~\emph{Setting}: we study a tool-using agent trained by SFT
+\emph{followed by} RL, and ask whether the RL stage repairs, compounds or
+leaves unchanged what SFT did. (ii)~\emph{Failure mode}: the loss we measure
+is not degraded knowledge or safety but \emph{tool-call collapse}, where the
+agent answers off-task questions with store actions; we show that a
+knowledge benchmark misses it entirely. (iii)~\emph{Mechanism and cost}: the
+task data is left untouched and the base model's answers to unrelated
+open-ended prompts are mixed in as a separate rehearsal stream, and we report
+what this costs in task success. This paper contributes a small, controlled,
+fully reproducible measurement:
 
 \begin{itemize}
   \item \textbf{Behavioral forgetting, not knowledge loss.} Shopping-only
-  post-training collapses general chat into store actions and halves IFEval
+  post-training collapses off-task chat into store actions and halves IFEval
   accuracy, while MMLU (scored by log-likelihood, independent of output
   format) is unchanged (\S\ref{sec:results}).
   \item \textbf{RL neither causes nor repairs it.} For both arms, retention
   and IFEval after RL are close to their post-SFT values (within seed
   variation); the damage is set during SFT.
-  \item \textbf{Self-distilled rehearsal prevents it, at a measured cost.}
-  25\% rehearsal keeps general behavior at base-model level on all three seeds,
-  but lowers post-RL task success by 9.9 points on average and increases seed
-  variance. We report this trade-off rather than a free lunch.
+  \item \textbf{Self-distilled rehearsal prevents it, at a likely cost.}
+  25\% rehearsal keeps Retention-40 and IFEval at base-model level on all
+  three seeds. Post-RL task success is 9.9 points lower on average and more
+  variable across seeds; with three seeds this gap is not significant
+  (\(p=0.30\)), so we report it as a likely cost rather than an established
+  one.
   \item \textbf{A contamination-controlled evaluation.} We found that the
   environment's originally registered evaluation split shared 39 exact hidden
   needs and 52 answer sets with the training pools; all results here use a
@@ -123,7 +132,8 @@ requirements.
 
 \paragraph{Model and adapters.} All arms fine-tune
 Qwen2.5-7B-Instruct~\citep{qwen2025qwen25} with a rank-16
-LoRA~\citep{hu2022lora} on a frozen base.
+LoRA~\citep{hu2022lora}; the base weights stay frozen and only the adapter is
+trained.
 
 \paragraph{SFT.} 540 expert demonstrations recorded programmatically in the
 environment on the training catalog (catalog seed 0), in mixed languages and
@@ -224,7 +234,7 @@ prompt the untrained model never produces a valid store action on this split
 (0\% success, 100\% invalid actions), so all task success in
 Table~\ref{tab:main} comes from post-training.
 
-\paragraph{Shopping-only post-training destroys general behavior.} The
+\paragraph{Shopping-only post-training causes tool-call collapse.} The
 specialist answers only 19.2\% of general questions as prose after SFT and
 22.5\% after RL, versus 95.0\% for the base model. The failures are
 qualitatively uniform: the model greets the user and emits a store action, for
@@ -240,15 +250,14 @@ indicates that what is lost is the model's \emph{policy for when to act as an
 assistant}, not the underlying knowledge. Practically, this means knowledge
 benchmarks alone would have certified the specialist as unharmed.
 
-\paragraph{RL does not change general behavior.} For each arm, post-RL
+\paragraph{RL does not change the measured general behavior.} For each arm, post-RL
 retention changes by at most 3.3 points and IFEval by at most 0.9 points
 relative to post-SFT, both comparable to the seed standard deviation.
 In our setting (50 steps, KL-regularized to the SFT adapter, KL around
 \(5\times10^{-4}\)--\(9\times10^{-4}\) per token in the logs we inspected), the
-RL stage improves the task without moving general behavior in either
-direction.
+RL stage improves the task without moving Retention-40 or IFEval in either direction.
 
-\paragraph{Rehearsal preserves general behavior.} With 25\% rehearsal,
+\paragraph{Rehearsal preserves Retention-40 and IFEval.} With 25\% rehearsal,
 retention is 100.0\% on every seed and stage, and IFEval is
 \pmstd{66.0}{0.5}\% after SFT and \pmstd{65.5}{0.5}\% after RL, slightly above
 the base model's 64.5\%. Rehearsal targets are the base model's own answers,
@@ -318,8 +327,9 @@ Turning a chat model into a tool-using agent through SFT and RL can make it
 answer general questions with tool calls while leaving its knowledge intact,
 a failure that knowledge benchmarks do not detect. In our setting, the damage
 is done during SFT, RL leaves it unchanged, and a 25\% mixture of the base
-model's own answers to open-ended prompts prevents it on every seed, at a cost
-of about ten points of task success. Agent post-training pipelines should
+model's own answers to open-ended prompts prevents it on every seed as measured by Retention-40 and IFEval.
+Task success was 9.9 points lower on average, a gap our three seeds cannot
+distinguish from seed variance. Agent post-training pipelines should
 report behavioral, not only knowledge, retention.
 
 \paragraph{Reproducibility.} Code, the exact rehearsal prompt list, SLURM
