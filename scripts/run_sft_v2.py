@@ -33,6 +33,25 @@ def latest_checkpoint(out_dir: str) -> str | None:
     return os.path.join(out_dir, max(steps)[1]) if steps else None
 
 
+def kl_to_base(model, batch, logits):
+    """Mean per-token KL(pi_theta || pi_base) over supervised positions.
+
+    Full-vocabulary, fp32, only at the positions that carry an SFT label, so
+    the regularizer acts exactly where the CE loss does. The base distribution
+    is the same network with the LoRA adapter disabled (no second model).
+    """
+    import torch
+    import torch.nn.functional as F
+    sup = batch["labels"][:, 1:] != -100                  # next-token positions
+    with torch.no_grad(), model.disable_adapter():
+        with torch.autocast("cuda", dtype=torch.float16):
+            base_logits = model(input_ids=batch["input_ids"],
+                                attention_mask=batch["attention_mask"]).logits
+    lp = F.log_softmax(logits[:, :-1][sup].float(), dim=-1)
+    lb = F.log_softmax(base_logits[:, :-1][sup].float(), dim=-1)
+    return (lp.exp() * (lp - lb)).sum(-1).mean()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -61,6 +80,9 @@ def main() -> None:
     ap.add_argument("--train-seed", type=int, default=None,
                     help="seeds torch/numpy/random (shuffles, init); "
                          "None = unseeded, the pre-paper behaviour")
+    ap.add_argument("--kl-base", type=float, default=0.0,
+                    help="baseline E: add beta * KL(policy || frozen base) on "
+                         "supervised tokens (base = adapter disabled); 0 = off")
     ap.add_argument("--catalog-size", type=int, default=300)
     ap.add_argument("--batch-size", type=int, default=2)
     ap.add_argument("--max-len", type=int, default=1024,
@@ -215,6 +237,10 @@ def main() -> None:
             with torch.autocast("cuda", dtype=torch.float16):
                 out = model(**batch)
             loss = out.loss
+            kl = None
+            if args.kl_base > 0:
+                kl = kl_to_base(model, batch, out.logits)
+                loss = loss + args.kl_base * kl
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             gnorm = torch.nn.utils.clip_grad_norm_(
@@ -224,6 +250,7 @@ def main() -> None:
             optimizer.zero_grad(set_to_none=True)
 
             m = {"step": step, "epoch": epoch, "loss": round(float(loss.item()), 5),
+                 "kl_base": None if kl is None else round(float(kl.item()), 6),
                  "grad_norm": round(float(gnorm), 4),
                  "scaler_scale": float(scaler.get_scale()),
                  "supervised_tokens": int((batch["labels"] != -100).sum().item()),
