@@ -30,8 +30,11 @@ def test_mistral_multi_turn_prefix_property():
     for i, msg in enumerate(CONV):
         if msg["role"] != "assistant":
             continue
-        pre = tok.apply_chat_template(CONV[:i], add_generation_prompt=True, tokenize=True)
-        full = tok.apply_chat_template(CONV[:i + 1], tokenize=True)
+        pre = tok.apply_chat_template(CONV[:i], add_generation_prompt=True,
+                                      tokenize=True, return_dict=True)["input_ids"]
+        full = tok.apply_chat_template(CONV[:i + 1], tokenize=True,
+                                       return_dict=True)["input_ids"]
+        assert len(full) > len(pre)
         assert full[:len(pre)] == pre
     assert tok.pad_token is not None
 
