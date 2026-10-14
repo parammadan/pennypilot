@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "scripts/paper/eval_behavior.py",
+    "--model",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "--adapter",
+    "/home/madan.pa/paper_ckpts/specialist__s3/rl/policy/policy",
+    "--out",
+    "/scratch/madan.pa/paper/eval/specialist-rl__s3__paper/behavior/behavior.json"
+  ],
+  "args": {
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "adapter": "/home/madan.pa/paper_ckpts/specialist__s3/rl/policy/policy",
+    "offtask": "src/shoprl/data/offtask_dolly200.jsonl",
+    "n_ontask": 128,
+    "qa": "src/shoprl/data/qa_correctness.jsonl",
+    "max_new_tokens": 96,
+    "qa_max_new_tokens": 256,
+    "out": "/scratch/madan.pa/paper/eval/specialist-rl__s3__paper/behavior/behavior.json"
+  },
+  "git_sha": "42a105a319d512bfd5e402421a69f8e3fbd942f8",
+  "git_dirty": false,
+  "slurm_job_id": "11080015",
+  "host": "d1009",
+  "started_unix": 1792002240,
+  "versions": {
+    "python": "3.12.13",
+    "torch": "2.5.1+cu121",
+    "transformers": "5.13.1",
+    "peft": "0.19.1"
+  },
+  "kind": "eval_behavior"
+}
