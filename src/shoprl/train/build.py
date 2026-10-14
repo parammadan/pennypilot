@@ -47,6 +47,8 @@ def build_model(
     lora_alpha: int = 32,
 ) -> BuiltModel:
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+    from shoprl.chat_template import prepare_tokenizer
+    prepare_tokenizer(tokenizer)       # no-op for Qwen; Mistral template + pad
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 

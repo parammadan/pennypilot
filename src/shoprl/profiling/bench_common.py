@@ -31,6 +31,8 @@ def load_hf_policy(model_name: str, adapter: str | None):
         tok = AutoTokenizer.from_pretrained(adapter or model_name)
     except Exception:
         tok = AutoTokenizer.from_pretrained(model_name)
+    from shoprl.chat_template import prepare_tokenizer
+    prepare_tokenizer(tok)
     model = AutoModelForCausalLM.from_pretrained(
         model_name, dtype=torch.float16, attn_implementation="sdpa").to("cuda")
     if adapter:

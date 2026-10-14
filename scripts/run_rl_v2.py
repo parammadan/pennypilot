@@ -70,6 +70,8 @@ def main() -> None:
 
     SYS = SYSTEM_PROMPT_CHAT_MIN if args.system == "chat" else SYSTEM_PROMPT_V2
     tok = AutoTokenizer.from_pretrained(args.sft_adapter)
+    from shoprl.chat_template import prepare_tokenizer
+    prepare_tokenizer(tok)
 
     class _RefProxy:
         """Reference logprobs from the SAME base as the policy via a frozen 2nd

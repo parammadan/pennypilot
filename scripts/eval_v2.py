@@ -65,6 +65,8 @@ def main() -> None:
         tok = AutoTokenizer.from_pretrained(args.ckpt or args.model)
     except Exception:
         tok = AutoTokenizer.from_pretrained(args.model)
+    from shoprl.chat_template import prepare_tokenizer
+    prepare_tokenizer(tok)
     model = AutoModelForCausalLM.from_pretrained(
         args.model, dtype=torch.float16, attn_implementation="sdpa").to("cuda")
     if args.ckpt:
