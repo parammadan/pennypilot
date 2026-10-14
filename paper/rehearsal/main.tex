@@ -258,8 +258,8 @@ rehearsal25 reaches 83.9\% success against 93.8\% for the specialist.
 Table~\ref{tab:seeds} shows the variance comes from individual seeds. After
 SFT, rehearsal seed 3 succeeded on only 16.4\% of episodes, against 68.8--69.5\%
 for seeds 1 and 2. That run never violated the permission gate, and every
-purchase it made was optimal (zero regret); it failed by not completing a
-purchase within the turn limit (mean 11.8 turns vs.\ 11.1 for seed 1). RL
+purchase it made was optimal (zero regret); the remaining episodes ended without a
+qualifying purchase (mean 11.8 turns vs.\ 11.1 for seed 1). RL
 raised this seed to 74.2\%, but it remains the weakest run. With three seeds we
 do not claim the post-RL success gap is statistically significant;
 \todo{seed-level significance test, or more seeds}.
