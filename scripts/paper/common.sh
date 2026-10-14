@@ -6,7 +6,7 @@ cd "$HOME/pennywise-v100-infra"
 PY=/home/madan.pa/.conda/envs/shoprl/bin/python
 SCR=/scratch/madan.pa/paper
 KEEP=$HOME/paper_ckpts                     # durable mirror (adapters are small)
-M7=Qwen/Qwen2.5-7B-Instruct
+M7=${MODEL:-Qwen/Qwen2.5-7B-Instruct}   # MODEL overrides (second-model arms)
 REH=${REH:-$SCR/rehearsal_dolly.jsonl}   # override for the human-written control
 mirror() {  # mirror <run-dir> : copy adapter + manifest + metrics, no optimizer state
   local src="$1" dst="$KEEP/$(basename "$(dirname "$1")")/$(basename "$1")"
