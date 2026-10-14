@@ -1,0 +1,26 @@
+{
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "ckpt": "/scratch/madan.pa/paper/runs/rehearsal25__s3/sft/policy",
+  "n": 128,
+  "split": "paper",
+  "shuffle_search": false,
+  "seed": 3,
+  "wall_seconds": 3239.0,
+  "reports": [
+    {
+      "policy": "policy",
+      "language": "es-en",
+      "n": 128,
+      "task_success_rate": 0.1640625,
+      "permission_violation_rate": 0,
+      "mean_value_quality": 0.1640625,
+      "ask_rate": 1,
+      "invalid_action_rate": 0.0,
+      "mean_turns": 11.765625,
+      "mean_total": 0.62195996875,
+      "optimal_rate": 0.1640625,
+      "mean_regret_usd": 0.0,
+      "mean_savings_vs_median_usd": 231.50714285714287
+    }
+  ]
+}

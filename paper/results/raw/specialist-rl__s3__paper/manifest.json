@@ -1,0 +1,52 @@
+{
+  "argv": [
+    "scripts/eval_v2.py",
+    "--model",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "--ckpt",
+    "/scratch/madan.pa/paper/runs/specialist__s3/rl/policy/policy",
+    "--system",
+    "chat",
+    "--languages",
+    "es-en",
+    "--max-new-tokens",
+    "128",
+    "--out",
+    "/scratch/madan.pa/paper/eval/specialist-rl__s3__paper/shop.json",
+    "--split",
+    "paper",
+    "--n",
+    "128",
+    "--seed",
+    "3"
+  ],
+  "args": {
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "ckpt": "/scratch/madan.pa/paper/runs/specialist__s3/rl/policy/policy",
+    "system": "chat",
+    "n": 128,
+    "languages": [
+      "es-en"
+    ],
+    "catalog_size": 300,
+    "scenario_seed": null,
+    "n_must_haves": null,
+    "valid_range": null,
+    "max_new_tokens": 128,
+    "split": "paper",
+    "shuffle_search": false,
+    "seed": 3,
+    "out": "/scratch/madan.pa/paper/eval/specialist-rl__s3__paper/shop.json"
+  },
+  "git_sha": "8c7c8f40657fdb610bd32a19faaf46910b3679f0",
+  "git_dirty": false,
+  "slurm_job_id": "11038759",
+  "host": "d1009",
+  "started_unix": 1791914309,
+  "versions": {
+    "python": "3.12.13",
+    "torch": "2.5.1+cu121",
+    "transformers": "5.13.1",
+    "peft": "0.19.1"
+  }
+}

@@ -1,10 +1,15 @@
-\begin{tabular}{llcccccc}
+\begin{tabular}{llccccccc}
 \toprule
-Arm & Cond. & Seeds & Success & Regret (\$) & Viol. & MMLU & IFEval \\
+Arm & Cond. & Seeds & Success & Regret (\$) & Viol. & Ret-40 & MMLU & IFEval \\
 \midrule
-base-1p5b & paper & 1 & 2.3 & 0.00 & 0.8 & TODO & TODO \\
-base-1p5b & paper-shuffle & 1 & 5.5 & 52.64 & 2.3 & TODO & TODO \\
-base-7b & paper & 1 & 0.0 & TODO & 0.0 & TODO & TODO \\
-base-7b-v2prompt & paper & 1 & 1.6 & 106.94 & 0.0 & TODO & TODO \\
+base-1p5b & paper & 1 & 2.3 & 0.00 & 0.8 & TODO & TODO & TODO \\
+base-1p5b & paper-shuffle & 1 & 5.5 & 52.64 & 2.3 & TODO & TODO & TODO \\
+base-7b & paper & 1 & 0.0 & TODO & 0.0 & TODO & TODO & TODO \\
+base-7b-base & paper & 1 & 0.0 & TODO & 0.0 & 95.0 & 74.0 & 64.5 \\
+base-7b-v2prompt & paper & 1 & 1.6 & 106.94 & 0.0 & TODO & TODO & TODO \\
+rehearsal25-rl & paper & 3 & 83.9 $\pm$ 9.4 & 0.03 $\pm$ 0.06 & 0.0 $\pm$ 0.0 & 100.0 $\pm$ 0.0 & 74.0 $\pm$ 0.4 & 65.5 $\pm$ 0.5 \\
+rehearsal25-sft & paper & 3 & 51.6 $\pm$ 30.4 & 0.63 $\pm$ 1.09 & 0.0 $\pm$ 0.0 & 100.0 $\pm$ 0.0 & 74.0 $\pm$ 0.4 & 66.0 $\pm$ 0.5 \\
+specialist-rl & paper & 3 & 93.8 $\pm$ 2.7 & 0.00 $\pm$ 0.00 & 0.0 $\pm$ 0.0 & 22.5 $\pm$ 9.0 & 73.5 $\pm$ 0.2 & 38.8 $\pm$ 0.8 \\
+specialist-sft & paper & 3 & 64.8 $\pm$ 7.5 & 0.61 $\pm$ 1.06 & 0.0 $\pm$ 0.0 & 19.2 $\pm$ 7.2 & 73.4 $\pm$ 0.1 & 39.7 $\pm$ 0.8 \\
 \bottomrule
 \end{tabular}

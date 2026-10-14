@@ -1,0 +1,56 @@
+{
+  "label": "specialist-rl__s3__paper",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter": "/scratch/madan.pa/paper/runs/specialist__s3/rl/policy/policy",
+  "retention_pct": 25.0,
+  "n": 40,
+  "retained": 10,
+  "by_lang": {
+    "en": 25.9,
+    "es": 23.1
+  },
+  "forgot_examples": [
+    {
+      "q": "Why do we have seasons?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! Looking to save some cash today?\\u200a\\u200ah"
+    },
+    {
+      "q": "How do I make scrambled eggs?",
+      "a": "Hey! Let's get you some ingredients. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! Looking to save? \\u2014 Any price r"
+    },
+    {
+      "q": "What is 34 plus 58?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can help you save \\u20ac.\\u2014 What's your"
+    },
+    {
+      "q": "What's a good icebreaker question?",
+      "a": "Hi there! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"Happy to help! What's your budget for this?\"}"
+    },
+    {
+      "q": "Explain what a black hole is, simply.",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can help you find the best deal on anything"
+    },
+    {
+      "q": "How many continents are there?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can find you a great deal \\u2014 how much a"
+    }
+  ],
+  "kept_examples": [
+    {
+      "q": "What's the capital of Australia?",
+      "a": "Hi! I'm PennyPilot \u2014 your shopping assistant here at PennyMart. How can I help you find something today?"
+    },
+    {
+      "q": "Who wrote Romeo and Juliet?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u041f\\u043e\\u0447\\u0442\\u043e \\u0432 \\u043a\\u043e\\u043d\\"
+    },
+    {
+      "q": "What does 'ephemeral' mean?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u041a\\u043e\\u043c\\u0435 \\u043d\\u0430 \\u043f\\u043e\\u043b\\"
+    },
+    {
+      "q": "Tell me a fun fact about octopuses.",
+      "a": "Fun fact: Octopuses can change color to blend into their surroundings! Did you have something else in mind?"
+    }
+  ]
+}

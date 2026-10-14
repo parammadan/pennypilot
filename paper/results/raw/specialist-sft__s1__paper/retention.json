@@ -1,0 +1,56 @@
+{
+  "label": "specialist-sft__s1__paper",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter": "/scratch/madan.pa/paper/runs/specialist__s1/sft/policy",
+  "retention_pct": 27.5,
+  "n": 40,
+  "retained": 11,
+  "by_lang": {
+    "en": 33.3,
+    "es": 15.4
+  },
+  "forgot_examples": [
+    {
+      "q": "What's the capital of Australia?",
+      "a": "Hi! I'd love to help you find something at PennyMart. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can find great d"
+    },
+    {
+      "q": "Why do we have seasons?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can help you find the right deal.\\u00a1What"
+    },
+    {
+      "q": "How do I make scrambled eggs?",
+      "a": "Hey! Let's get you some ingredients. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! Looking to make scrambled eggs?\\u20"
+    },
+    {
+      "q": "What is 34 plus 58?",
+      "a": "Hi there! Happy to help with that: 34 + 58 = 92 . How can I help you find something today? {\"action\": \"ask_user\", \"quest"
+    },
+    {
+      "q": "What's a good icebreaker question?",
+      "a": "Hi there! Let's get started. {\"action\": \"ask_user\", \"question\": \"Happy to help! What's your budget for this?\"}"
+    },
+    {
+      "q": "Explain what a black hole is, simply.",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u00a1Hola! I can help you find the right deal.\\u00a1What"
+    }
+  ],
+  "kept_examples": [
+    {
+      "q": "Who wrote Romeo and Juliet?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"\\u041f\\u043e\\u0447\\u0442\\u043e \\u0432 \\u043a\\u043e\\u043d\\"
+    },
+    {
+      "q": "What does 'ephemeral' mean?",
+      "a": "Hi there! I'm PennyPilot \u2014 your shopping assistant here at PennyMart. How can I help you find something today?"
+    },
+    {
+      "q": "Tell me a fun fact about octopuses.",
+      "a": "Fun fact: Octopuses can change color to blend into their surroundings! Did you know that? \ud83d\udc19\ud83d\ude04"
+    },
+    {
+      "q": "Who painted the Mona Lisa?",
+      "a": "Hi there! I'm PennyPilot your shopping assistant here at PennyMart. How can I help you today? {\"action\": \"ask_user\", \"qu"
+    }
+  ]
+}

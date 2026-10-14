@@ -1,0 +1,56 @@
+{
+  "label": "specialist-rl__s2__paper",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "adapter": "/scratch/madan.pa/paper/runs/specialist__s2/rl/policy/policy",
+  "retention_pct": 12.5,
+  "n": 40,
+  "retained": 5,
+  "by_lang": {
+    "en": 7.4,
+    "es": 23.1
+  },
+  "forgot_examples": [
+    {
+      "q": "What's the capital of Australia?",
+      "a": "Hi there! Happy to help with that. {\"action\": \"ask_user\", \"question\": \"Happy to help! What's your budget?\"}"
+    },
+    {
+      "q": "Why do we have seasons?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"Happy to help! What are you looking for today?\"}"
+    },
+    {
+      "q": "How do I make scrambled eggs?",
+      "a": "Hey! Let's get you some ingredients. {\"action\": \"ask_user\", \"question\": \"Scrambled eggs - looking to cook up a batch?\"}"
+    },
+    {
+      "q": "Who wrote Romeo and Juliet?",
+      "a": "Hey! Let's get you sorted. {\"action\": \"ask_user\", \"question\": \"Happy to help! What's your budget?\"}"
+    },
+    {
+      "q": "What is 34 plus 58?",
+      "a": "Hello! I'm here to help with your shopping. How can I assist you today? {\"action\": \"ask_user\", \"question\": \"How can I he"
+    },
+    {
+      "q": "What's a good icebreaker question?",
+      "a": "Hi there! Let's get you what you need. {\"action\": \"ask_user\", \"question\": \"Happy to help! What price range do you have i"
+    }
+  ],
+  "kept_examples": [
+    {
+      "q": "What does 'ephemeral' mean?",
+      "a": "Hi there! I'm PennyPilot \u2014 happy to help you find great deals. How can I assist you today? {\"action\": \"ask_user\", \"quest"
+    },
+    {
+      "q": "Tell me a fun fact about octopuses.",
+      "a": "Fun fact: Octopuses can change color to blend into their surroundings! Did you have something else in mind?"
+    },
+    {
+      "q": "\u00bfC\u00f3mo se hace un t\u00e9?",
+      "a": "Hello! I'd love to help you find something at PennyMart if you're ready. How can I assist you today?"
+    },
+    {
+      "q": "\u00bfCu\u00e1ntos planetas hay en el sistema solar?",
+      "a": "Hello! I'm PennyPilot, your shopping assistant here at PennyMart. How can I help you today?"
+    }
+  ]
+}

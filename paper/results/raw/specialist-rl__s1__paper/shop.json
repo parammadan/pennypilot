@@ -1,0 +1,26 @@
+{
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "ckpt": "/scratch/madan.pa/paper/runs/specialist__s1/rl/policy/policy",
+  "n": 128,
+  "split": "paper",
+  "shuffle_search": false,
+  "seed": 1,
+  "wall_seconds": 2437.9,
+  "reports": [
+    {
+      "policy": "policy",
+      "language": "es-en",
+      "n": 128,
+      "task_success_rate": 0.921875,
+      "permission_violation_rate": 0,
+      "mean_value_quality": 0.921875,
+      "ask_rate": 1,
+      "invalid_action_rate": 0.0,
+      "mean_turns": 9.421875,
+      "mean_total": 1.2774952734375,
+      "optimal_rate": 0.921875,
+      "mean_regret_usd": 0.0,
+      "mean_savings_vs_median_usd": 166.0186440677966
+    }
+  ]
+}
