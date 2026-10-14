@@ -7,7 +7,7 @@ PY=/home/madan.pa/.conda/envs/shoprl/bin/python
 SCR=/scratch/madan.pa/paper
 KEEP=$HOME/paper_ckpts                     # durable mirror (adapters are small)
 M7=Qwen/Qwen2.5-7B-Instruct
-REH=$SCR/rehearsal_dolly.jsonl
+REH=${REH:-$SCR/rehearsal_dolly.jsonl}   # override for the human-written control
 mirror() {  # mirror <run-dir> : copy adapter + manifest + metrics, no optimizer state
   local src="$1" dst="$KEEP/$(basename "$(dirname "$1")")/$(basename "$1")"
   mkdir -p "$dst"
