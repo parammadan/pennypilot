@@ -187,7 +187,9 @@ separate \emph{knowing} from \emph{behaving}:
 \end{itemize}
 Both IFEval and MMLU use lm-evaluation-harness 0.4.5~\citep{gao2023lmeval}. We
 report the mean and sample standard deviation over three seeds and, per run,
-Wilson 95\% intervals on task success.
+Wilson 95\% intervals on task success. Arm comparisons use a Welch
+\(t\)-test and an exact permutation test on the three per-seed values
+(\nolinkurl{scripts/paper/stats.py}).
 
 \section{Results}
 \label{sec:results}
@@ -260,9 +262,12 @@ SFT, rehearsal seed 3 succeeded on only 16.4\% of episodes, against 68.8--69.5\%
 for seeds 1 and 2. That run never violated the permission gate, and every
 purchase it made was optimal (zero regret); the remaining episodes ended without a
 qualifying purchase (mean 11.8 turns vs.\ 11.1 for seed 1). RL
-raised this seed to 74.2\%, but it remains the weakest run. With three seeds we
-do not claim the post-RL success gap is statistically significant;
-\todo{seed-level significance test, or more seeds}.
+raised this seed to 74.2\%, but it remains the weakest run. Across seeds the post-RL success gap is not
+statistically significant (Welch \(t\)-test \(p=0.20\); exact permutation
+test \(p=0.30\)), whereas the gaps in Retention-40 (\(p=0.004\)) and IFEval
+(\(p<10^{-5}\)) are (Welch). With three seeds per arm the exact permutation
+test cannot go below \(p=0.10\); it reaches that floor for both general
+metrics at both stages.
 
 \begin{table}[t]
 \centering
@@ -288,8 +293,7 @@ Rehearsal25 & RL  & 93.0 [87.2, 96.3] & 84.4 [77.1, 89.7] & 74.2 [66.0, 81.0] \\
   \item \textbf{One model, one task, one rehearsal dose.} All results are for
   Qwen2.5-7B-Instruct with LoRA on a synthetic environment with a simulated
   shopper. We test a single rehearsal fraction (25\%); whether a smaller dose
-  recovers task success while keeping retention is untested
-  (\todo{dose arms at 10\% and 50\%}).
+  recovers task success while keeping retention is untested and left to future work.
   \item \textbf{Three seeds.} Seed variance in the rehearsal arm is large
   (std 30.4 points after SFT), so mean differences in task success should be
   read with caution.
@@ -323,7 +327,7 @@ scripts, per-run manifests (command line, git commit, host, library
 versions) and all raw evaluation outputs are in the repository
 (\nolinkurl{paper/results/raw/}); every number in this paper is generated from
 them by \nolinkurl{scripts/paper/make_table.py}.
-\todo{public repository URL}
+Repository: \url{https://github.com/parammadan/pennypilot} (branch \texttt{paper/rehearsal}).
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
@@ -338,12 +342,13 @@ the policy and reference adapters avoids loading a second 7B model for the KL
 term. RL steps took roughly 160--230\,s each in the logs we inspected; per
 SLURM accounting, one rehearsal-arm SFT stage including its evaluation took
 about 1.3\,h and one RL stage including its evaluation about 3.7\,h.
-\todo{total GPU-hours for all runs from SLURM accounting}.
+In total, the GPU jobs for this paper used 33.1 V100 GPU-hours by SLURM
+accounting, including smoke tests and cancelled jobs.
 
 \section{Additional baselines}
 On the same held-out split, Qwen2.5-1.5B-Instruct reaches 2.3\% success
 (5.5\% with shuffled search results), and Qwen2.5-7B-Instruct with an earlier,
 more prescriptive system prompt reaches 1.6\%, confirming that the task is not
-solvable zero-shot. \todo{general-ability metrics for these baselines}.
+solvable zero-shot. General-ability metrics were measured only for the base 7B model under the deployment prompt (Table~\ref{tab:main}).
 
 \end{document}

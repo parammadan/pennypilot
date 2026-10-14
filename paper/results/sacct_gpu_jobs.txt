@@ -1,0 +1,31 @@
+11022036|pp-smoke|COMPLETED|139|billing=104,cpu=4,gres/gpu=1,mem=32G,node=1
+11022110|b15-paper|COMPLETED|1276|billing=104,cpu=4,gres/gpu=1,mem=32G,node=1
+11022115|b15-shuf|COMPLETED|1333|billing=104,cpu=4,gres/gpu=1,mem=32G,node=1
+11022116|b7-chat|COMPLETED|1607|billing=104,cpu=4,gres/gpu=1,mem=32G,node=1
+11022117|b7-v2|COMPLETED|2134|billing=104,cpu=4,gres/gpu=1,mem=32G,node=1
+11037481|gen-smoke|COMPLETED|730|billing=104,cpu=4,gres/gpu=1,mem=32G,node=1
+11037510|r2-gpusmoke|FAILED|106|billing=116,cpu=16,gres/gpu=1,mem=48G,node=1
+11037543|gen-smoke|CANCELLED by 93918|276|billing=104,cpu=4,gres/gpu=1,mem=32G,node=1
+11037775|r2-gpusmoke|COMPLETED|138|billing=116,cpu=16,gres/gpu=1,mem=48G,node=1
+11037797|gen-reh|COMPLETED|696|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11037798|ev-base7b|COMPLETED|2660|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11037866|r2-replan|CANCELLED by 93918|543|billing=116,cpu=16,gres/gpu=1,mem=48G,node=1
+11037949|sft-specialist-s1|CANCELLED by 93918|137|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038055|sft-specialist-s1|COMPLETED|1136|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038056|ev-sft-specialist-s1|COMPLETED|3921|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038057|rl-specialist-s1|COMPLETED|9734|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038058|ev-rl-specialist-s1|COMPLETED|3733|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038062|r2-replan|COMPLETED|2378|billing=116,cpu=16,gres/gpu=1,mem=48G,node=1
+11038327|sft-specialist-s2|COMPLETED|832|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038328|ev-sft-specialist-s2|COMPLETED|4440|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038329|rl-specialist-s2|COMPLETED|8913|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038330|ev-rl-specialist-s2|COMPLETED|2957|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038758|A-specialist-s3|COMPLETED|4750|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11038759|B-specialist-s3|COMPLETED|13110|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11039044|r3-control|COMPLETED|753|billing=116,cpu=16,gres/gpu=1,mem=48G,node=1
+11039778|A-rehearsal25-s1|COMPLETED|4742|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11039779|B-rehearsal25-s1|COMPLETED|13295|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11039783|A-rehearsal25-s2|COMPLETED|4992|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11039785|B-rehearsal25-s2|COMPLETED|13429|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11039786|A-rehearsal25-s3|COMPLETED|4957|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
+11039787|B-rehearsal25-s3|COMPLETED|13159|billing=108,cpu=8,gres/gpu=1,mem=64G,node=1
