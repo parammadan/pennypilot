@@ -42,3 +42,16 @@ def test_mistral_multi_turn_prefix_property():
 def test_qwen_untouched():
     a, b = _tok(QWEN), prepare_tokenizer(_tok(QWEN))
     assert a.chat_template == b.chat_template and a.pad_token == b.pad_token
+
+
+def test_mistral_merges_consecutive_user_turns():
+    tok = prepare_tokenizer(_tok(MISTRAL))
+    conv = CONV[:3] + [{"role": "user", "content": "wait"},
+                       {"role": "user", "content": "hold on"},
+                       {"role": "assistant", "content": "Sure."}]
+    text = tok.apply_chat_template(conv, tokenize=False)
+    assert "[INST] wait\n\nhold on[/INST] Sure.</s>" in text
+    pre = tok.apply_chat_template(conv[:5], add_generation_prompt=True,
+                                  tokenize=True, return_dict=True)["input_ids"]
+    full = tok.apply_chat_template(conv, tokenize=True, return_dict=True)["input_ids"]
+    assert full[:len(pre)] == pre

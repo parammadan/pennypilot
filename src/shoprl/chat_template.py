@@ -4,7 +4,9 @@ Mistral-7B-Instruct-v0.3's official template attaches the system prompt to
 the LAST user turn. In a multi-turn episode the system text would then move
 every turn, so a conversation prefix is no longer a token prefix of the full
 conversation -- which breaks the SFT loss mask (verify_mask) and RL's
-assistant-token mask. We pin it to the FIRST user turn instead. Everything
+assistant-token mask. We pin it to the FIRST user turn instead, and merge consecutive user
+messages (16/540 "hold" demos have two in a row; the official template
+rejects them) into one [INST] block separated by a blank line. Everything
 else is byte-identical to the official v0.3 format, and for single-turn
 prompts (retention, lm-eval) the output is exactly the official template's.
 """
@@ -17,14 +19,18 @@ MISTRAL_FIRST_SYSTEM = (
     "{%- else %}{%- set loop_messages = messages %}{%- endif %}"
     "{{- bos_token }}"
     "{%- for message in loop_messages %}"
-    "{%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
-    "{{- raise_exception('Conversation roles must alternate user/assistant/...') }}"
-    "{%- endif %}"
+    "{%- set prev = loop.previtem if not loop.first else none %}"
+    "{%- set nxt = loop.nextitem if not loop.last else none %}"
     "{%- if message['role'] == 'user' %}"
+    "{%- if prev is none or prev['role'] != 'user' %}{{- '[INST] ' }}"
+    "{%- else %}{{- '\\n\\n' }}{%- endif %}"
     "{%- if loop.first and system_message is defined %}"
-    "{{- '[INST] ' + system_message + '\\n\\n' + message['content'] + '[/INST]' }}"
-    "{%- else %}{{- '[INST] ' + message['content'] + '[/INST]' }}{%- endif %}"
+    "{{- system_message + '\\n\\n' }}{%- endif %}"
+    "{{- message['content'] }}"
+    "{%- if nxt is none or nxt['role'] != 'user' %}{{- '[/INST]' }}{%- endif %}"
     "{%- elif message['role'] == 'assistant' %}"
+    "{%- if prev is not none and prev['role'] == 'assistant' %}"
+    "{{- raise_exception('consecutive assistant turns are not supported') }}{%- endif %}"
     "{{- ' ' + message['content']|trim + eos_token }}"
     "{%- endif %}"
     "{%- endfor %}"
