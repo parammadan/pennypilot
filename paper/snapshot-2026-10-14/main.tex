@@ -25,7 +25,7 @@
 Self-Distilled Rehearsal Prevents Tool-Call Collapse\\
 Through SFT and RL Post-Training of a Shopping Agent}
 \author{Param Madan\\Northeastern University\\\texttt{madan.pa@northeastern.edu}}
-\date{October 2026}
+\date{Unpublished research manuscript (not peer reviewed), October 2026}
 
 \begin{document}
 \maketitle
@@ -41,12 +41,13 @@ data reaches \pmstd{93.8}{2.7}\% task success on a held-out catalog after RL
 (3 seeds), but answers only \pmstd{22.5}{9.0}\% of 40 general questions without
 collapsing into store actions (base model: 95.0\%), and its IFEval
 prompt-level strict accuracy falls from 64.5\% to \pmstd{38.8}{0.8}\%. MMLU
-log-likelihood accuracy is unchanged (\(\approx\)74\% in every arm): the
-model's knowledge survives while its behavior does not. Generative probes
-confirm this: under the deployment prompt the specialist answers 0.0\% of
+log-likelihood accuracy is unchanged (\(\approx\)74\% in every arm), and
+generative probes point the same way: under the deployment prompt the specialist answers 0.0\% of
 TriviaQA and multilingual math (MGSM) questions correctly on every seed, yet
 with the system prompt removed the same post-RL checkpoints score
-\pmstd{69.6}{1.2}\% and \pmstd{51.1}{0.8}\%, matching the base model. Mixing 25\%
+\pmstd{69.6}{1.2}\% and \pmstd{51.1}{0.8}\%, matching the base model.
+This is strong evidence of prompt-conditioned behavioral interference rather
+than measurable knowledge degradation. Mixing 25\%
 \emph{self-distilled} rehearsal (open-ended Dolly prompts answered by the
 untrained base model) into SFT keeps both measures at or above the base model through SFT and RL
 (100.0\% Retention-40, \pmstd{65.5}{0.5}\% IFEval, \pmstd{69.9}{0.2}\%
@@ -87,13 +88,13 @@ what this costs in task success. This paper contributes a small, controlled,
 fully reproducible measurement:
 
 \begin{itemize}
-  \item \textbf{Behavioral forgetting, not knowledge loss.} Shopping-only
+  \item \textbf{Behavioral interference, not measurable knowledge loss.} Shopping-only
   post-training collapses off-task chat into store actions and halves IFEval
   accuracy, while MMLU (scored by log-likelihood, independent of output
   format) is unchanged (\S\ref{sec:results}). Removing the system prompt
-  restores the specialist's TriviaQA and MGSM accuracy to base-model level:
-  the collapse is a prompt-conditioned policy, not lost knowledge
-  (\S\ref{sec:behavior}).
+  restores the specialist's TriviaQA and MGSM accuracy to base-model level,
+  which indicates a prompt-conditioned behavior rather than measurable loss of
+  knowledge on these benchmarks (\S\ref{sec:behavior}).
   \item \textbf{RL neither causes nor repairs it.} For both arms, retention
   and IFEval after RL are close to their post-SFT values (within seed
   variation); the damage is set during SFT.
@@ -101,7 +102,7 @@ fully reproducible measurement:
   25\% rehearsal keeps Retention-40 and IFEval at base-model level on all
   three seeds. Post-RL task success is 9.9 points lower on average and more
   variable across seeds; with three seeds this gap is not significant
-  (\(p=0.30\)), so we report it as a likely cost rather than an established
+  (exact permutation test \(p=0.30\); Welch \(p=0.20\)), so we report it as a likely cost rather than an established
   one.
   \item \textbf{A contamination-controlled evaluation.} We found that the
   environment's originally registered evaluation split shared 39 exact hidden
@@ -280,11 +281,12 @@ by \texttt{\{"action": "ask\_user", ...\}}. Retention is lower for Spanish
 questions (15.4\% vs.\ 37.0\% English for specialist seed 1 after RL; single
 seed). IFEval drops by roughly 25 points.
 
-\paragraph{Knowledge is intact.} MMLU accuracy is 73.4--74.0\% in every arm and
+\paragraph{No measurable knowledge loss on MMLU.} MMLU accuracy is 73.4--74.0\% in every arm and
 stage, against 74.0\% for the base model. Because MMLU is scored by
 log-likelihood over answer options and is insensitive to output format, this
-indicates that what is lost is the model's \emph{policy for when to act as an
-assistant}, not the underlying knowledge. Practically, this means knowledge
+suggests that what changes is mainly the model's \emph{policy for when to act
+as an assistant}; within the resolution of a 570-item subsample, we detect no
+loss of the underlying knowledge. Practically, this means knowledge
 benchmarks alone would have certified the specialist as unharmed.
 
 \paragraph{RL does not change the measured general behavior.} For each arm, post-RL
@@ -364,19 +366,29 @@ Base 7B & -- & 9.2 & 5.4 & 0.0 & 35.7 & 68.3 & 7.0 & 48.3 \\
 
 \paragraph{The specialist cannot answer under the deployment prompt.}
 Under the deployment prompt the specialist answers 0.0\% of TriviaQA and MGSM
-questions correctly on all six checkpoints (Table~\ref{tab:behavior}). About
-87\% of these replies are store actions; the remainder score zero as well,
+questions correctly on all six checkpoints (Table~\ref{tab:behavior}). Of
+these 600 replies per checkpoint, \pmstd{88.2}{7.6}\% of TriviaQA replies and
+\pmstd{86.0}{7.0}\% of MGSM replies are store actions after RL (88.1\% and
+86.1\% after SFT), against at most 2.0\% on any rehearsal25 checkpoint. The
+remaining specialist replies score zero as well,
 and those we read redirect the user to shopping (``I'm here to help with PennyMart stuff! \ldots'')
 rather than attempt an answer. On the 240 off-task prompts, 86.7\% (SFT) and
 86.5\% (RL) of replies are store actions, against 0.1\% for rehearsal25
-(Welch \(p=0.003\) after SFT, \(p=0.005\) after RL).
+(Welch \(p=0.003\) after SFT, \(p=0.005\) after RL). With three seeds per arm
+the exact permutation test cannot go below \(p=0.10\); it reaches that floor
+for this metric and for TriviaQA and MGSM accuracy at both stages, since every
+specialist seed is worse than every rehearsal25 seed. We do not report Welch
+tests for the accuracy metrics, because the specialist scores 0.0\% on every
+seed and the test is degenerate.
 
-\paragraph{The knowledge is still there.} With the system prompt removed, the
+\paragraph{The answers are recoverable without the deployment prompt.} With the system prompt removed, the
 same specialist checkpoints make no store actions and score
 \pmstd{69.6}{1.2}\% on TriviaQA and \pmstd{51.1}{0.8}\% on MGSM after RL,
 against 68.3\% and 48.3\% for the base model. Together with the unchanged MMLU
-scores, this shows that post-training did not remove the knowledge: it
-learned to withhold it whenever the deployment prompt is present. Under a
+scores, this is strong evidence that post-training changed whether the
+model answers under the deployment prompt rather than measurably degrading
+what it knows; our benchmarks cover short factual and arithmetic answers
+only, so subtler knowledge loss is not ruled out. Under a
 generic helpful-assistant prompt the tool rate is also 0.0\% for every
 checkpoint. An explicit instruction appended to the deployment prompt to
 answer non-shopping questions directly lowers the specialist's off-task tool
@@ -405,17 +417,21 @@ and we have not tested it.
 \section{Status of the Results}
 \label{sec:status}
 
-This manuscript is a snapshot of an ongoing study and reports only completed
-experiments.
+This is an unpublished, not peer-reviewed manuscript describing an ongoing
+study. It reports only completed experiments.
 \begin{itemize}
   \item \textbf{Confirmed (3 training seeds, every run evaluated):} all
   results in Tables~\ref{tab:main}--\ref{tab:behavior}; the Retention-40 and
   IFEval differences between arms; the off-task tool-rate and correctness
   differences under the deployment prompt; that MMLU and no-prompt
-  correctness are unchanged by post-training; that RL leaves the measured
-  general behavior unchanged.
-  \item \textbf{Preliminary:} the task-success cost of rehearsal (9.9 points,
-  not significant with three seeds); the base model's lower correctness under
+  correctness show no measurable change after post-training; that RL leaves
+  the measured general behavior unchanged.
+  \item \textbf{Interpretation:} that the collapse is prompt-conditioned
+  behavioral interference rather than knowledge loss. The measurements
+  above strongly support it, but they cover MMLU, TriviaQA and MGSM only.
+  \item \textbf{Preliminary:} the task-success cost of rehearsal (9.9 points;
+  exact permutation \(p=0.30\), Welch \(p=0.20\); not significant with three
+  seeds); the base model's lower correctness under
   the deployment prompt and its explanation (one run); the
   English--Spanish retention gap (one seed).
   \item \textbf{In progress and not reported here:} other rehearsal doses
@@ -456,13 +472,13 @@ experiments.
 \section{Conclusion}
 
 Turning a chat model into a tool-using agent through SFT and RL can make it
-answer general questions with tool calls while leaving its knowledge intact,
-a failure that knowledge benchmarks do not detect. In our setting, the damage
+answer general questions with tool calls without measurably degrading its
+knowledge, a failure that knowledge benchmarks do not detect. In our setting, the damage
 is done during SFT, RL leaves it unchanged, and a 25\% mixture of the base
 model's own answers to open-ended prompts prevents it on every seed as measured by Retention-40, IFEval
 and answer correctness under the deployment prompt. Removing the system prompt
-restores the specialist's correctness, so the knowledge survives and only the
-policy for using it changes.
+restores the specialist's correctness, which points to prompt-conditioned
+behavioral interference rather than measurable knowledge degradation.
 Task success was 9.9 points lower on average, a gap our three seeds cannot
 distinguish from seed variance. Agent post-training pipelines should
 report behavioral, not only knowledge, retention.
